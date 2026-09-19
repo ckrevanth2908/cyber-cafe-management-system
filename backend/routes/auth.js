@@ -5,6 +5,8 @@ const jwt = require('jsonwebtoken');
 const { db } = require('../database/db');
 const { authMiddleware } = require('../middleware/auth');
 
+const JWT_SECRET = process.env.JWT_SECRET || 'cybercafe_super_secret_key_2024';
+
 // POST /api/v1/auth/login
 router.post('/login', (req, res) => {
   const { username, password } = req.body;
@@ -19,7 +21,7 @@ router.post('/login', (req, res) => {
 
   const token = jwt.sign(
     { id: user.id, username: user.username, full_name: user.full_name, role: user.role },
-    process.env.JWT_SECRET || 'secret',
+    JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || '8h' }
   );
 

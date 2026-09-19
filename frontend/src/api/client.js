@@ -27,8 +27,11 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      localStorage.removeItem('cyber_cafe_token');
-      window.location.href = '/login';
+      const isLoginRoute = error.config?.url?.includes('/auth/login');
+      if (!isLoginRoute && window.location.pathname !== '/login') {
+        localStorage.removeItem('cyber_cafe_token');
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

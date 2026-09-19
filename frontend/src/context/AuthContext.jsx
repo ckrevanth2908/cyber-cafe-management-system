@@ -37,15 +37,15 @@ export const AuthProvider = ({ children }) => {
         throw new Error('No token returned from server');
       }
 
-      setToken(authToken);
-      setUser(data.user);
       localStorage.setItem('cyber_cafe_token', authToken);
+      setToken(authToken);
+      setUser(data.user || { username, role: 'admin' });
       return { success: true };
     } catch (error) {
       console.error('Login error:', error);
       return { 
         success: false, 
-        error: error.response?.data?.detail || error.response?.data?.message || error.message || 'Login failed' 
+        error: error.response?.data?.detail || error.response?.data?.message || error.message || 'Invalid username or password' 
       };
     }
   };
