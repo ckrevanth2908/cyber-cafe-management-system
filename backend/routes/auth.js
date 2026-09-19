@@ -14,7 +14,7 @@ router.post('/login', (req, res) => {
 
   const user = db.prepare('SELECT * FROM users WHERE username = ? AND is_active = 1').get(username);
   if (!user || !bcrypt.compareSync(password, user.password)) {
-    return res.status(401).json({ detail: 'Invalid credentials' });
+    return res.status(401).json({ detail: 'Invalid username or password' });
   }
 
   const token = jwt.sign(
@@ -24,6 +24,7 @@ router.post('/login', (req, res) => {
   );
 
   return res.json({
+    token: token,
     access_token: token,
     token_type: 'bearer',
     user: {

@@ -71,8 +71,11 @@ router.post('/', authMiddleware, (req, res) => {
   return res.status(201).json(item);
 });
 
-// DELETE /api/v1/queue/:id
-router.delete('/:id', authMiddleware, (req, res) => {
+// DELETE /api/v1/queue/:id & POST /api/v1/queue/:id/cancel
+router.delete('/:id', authMiddleware, handleCancelQueue);
+router.post('/:id/cancel', authMiddleware, handleCancelQueue);
+
+function handleCancelQueue(req, res) {
   const existing = db.prepare('SELECT id FROM waiting_queue WHERE id = ?').get(req.params.id);
   if (!existing) {
     return res.status(404).json({ detail: 'Queue entry not found' });
@@ -80,6 +83,6 @@ router.delete('/:id', authMiddleware, (req, res) => {
 
   db.prepare("UPDATE waiting_queue SET status = 'cancelled' WHERE id = ?").run(req.params.id);
   return res.json({ detail: 'Queue entry cancelled successfully' });
-});
+}
 
 module.exports = router;

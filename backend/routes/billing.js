@@ -68,7 +68,8 @@ router.get('/preview/:session_id', authMiddleware, (req, res) => {
 
 // POST /api/v1/billing/finalize/:session_id
 router.post('/finalize/:session_id', authMiddleware, (req, res) => {
-  const { payment_method } = req.body;
+  const { payment_method, method } = req.body;
+  const selectedPaymentMethod = payment_method || method || 'cash';
   const session = db.prepare(`
     SELECT s.*, c.name as customer_name, tt.name as terminal_type_name
     FROM sessions s
@@ -127,7 +128,7 @@ router.post('/finalize/:session_id', authMiddleware, (req, res) => {
     const payRes = db.prepare(`
       INSERT INTO payments (session_id, customer_id, payment_type, session_charge, print_charge, total_amount, payment_method, status, receipt_number)
       VALUES (?, ?, 'session', ?, 0, ?, ?, 'paid', ?)
-    `).run(session.id, session.customer_id, sessionCharge, totalAmount, payment_method || 'cash', receiptNum);
+    `).run(session.id, session.customer_id, sessionCharge, totalAmount, selectedPaymentMethod, receiptNum);
 
     // Update daily revenue for the terminal type
     const today = new Date().toISOString().slice(0, 10);

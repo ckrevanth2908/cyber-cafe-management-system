@@ -29,8 +29,11 @@ router.put('/:id', authMiddleware, adminOnly, (req, res) => {
   return res.json(updated);
 });
 
-// PUT /api/v1/rates (Bulk Update)
-router.put('/', authMiddleware, adminOnly, (req, res) => {
+// PUT /api/v1/rates (Bulk Update) and /api/v1/rates/bulk
+router.put('/', authMiddleware, adminOnly, handleBulkUpdate);
+router.put('/bulk', authMiddleware, adminOnly, handleBulkUpdate);
+
+function handleBulkUpdate(req, res) {
   const rates = req.body; // array of { id, rate_per_unit, description }
   if (!Array.isArray(rates)) {
     return res.status(400).json({ detail: 'Expected an array of rates' });
@@ -53,6 +56,6 @@ router.put('/', authMiddleware, adminOnly, (req, res) => {
   transaction(rates);
   const allRates = db.prepare('SELECT * FROM service_rates ORDER BY id ASC').all();
   return res.json(allRates);
-});
+}
 
 module.exports = router;

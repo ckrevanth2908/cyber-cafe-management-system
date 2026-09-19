@@ -122,7 +122,10 @@ router.put('/:id', authMiddleware, adminOnly, (req, res) => {
 });
 
 // PUT /api/v1/terminals/:id/status
-router.put('/:id/status', authMiddleware, (req, res) => {
+router.put('/:id/status', authMiddleware, updateTerminalStatus);
+router.patch('/:id/status', authMiddleware, updateTerminalStatus);
+
+function updateTerminalStatus(req, res) {
   const { status } = req.body;
   if (!['available', 'occupied', 'maintenance'].includes(status)) {
     return res.status(400).json({ detail: 'Invalid status' });
@@ -140,7 +143,7 @@ router.put('/:id/status', authMiddleware, (req, res) => {
   db.prepare('UPDATE terminals SET status = ? WHERE id = ?').run(status, req.params.id);
   const updated = db.prepare('SELECT * FROM terminals WHERE id = ?').get(req.params.id);
   return res.json(updated);
-});
+}
 
 // DELETE /api/v1/terminals/:id
 router.delete('/:id', authMiddleware, adminOnly, (req, res) => {

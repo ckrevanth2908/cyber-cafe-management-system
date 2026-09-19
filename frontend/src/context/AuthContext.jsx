@@ -10,32 +10,42 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const verifyToken = async () => {
-      if (token) {
+      const storedToken = localStorage.getItem('cyber_cafe_token');
+      if (storedToken && storedToken !== 'undefined' && storedToken !== 'null') {
         try {
           const userData = await authApi.getMe();
           setUser(userData);
+          setToken(storedToken);
         } catch (error) {
           console.error("Token verification failed", error);
           logout();
         }
+      } else {
+        logout();
       }
       setIsLoading(false);
     };
 
     verifyToken();
-  }, [token]);
+  }, []);
 
   const login = async (username, password) => {
     try {
       const data = await authApi.login(username, password);
-      setToken(data.token);
+      const authToken = data.token || data.access_token;
+      if (!authToken) {
+        throw new Error('No token returned from server');
+      }
+
+      setToken(authToken);
       setUser(data.user);
-      localStorage.setItem('cyber_cafe_token', data.token);
+      localStorage.setItem('cyber_cafe_token', authToken);
       return { success: true };
     } catch (error) {
+      console.error('Login error:', error);
       return { 
         success: false, 
-        error: error.response?.data?.message || 'Login failed' 
+        error: error.response?.data?.detail || error.response?.data?.message || error.message || 'Login failed' 
       };
     }
   };
