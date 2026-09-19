@@ -46,7 +46,8 @@ router.get('/stats', authMiddleware, (req, res) => {
   const activeSessions = db.prepare("SELECT COUNT(*) as count FROM sessions WHERE status = 'active'").get().count;
   const availableTerminals = db.prepare("SELECT COUNT(*) as count FROM terminals WHERE status = 'available'").get().count;
   const totalTerminals = db.prepare("SELECT COUNT(*) as count FROM terminals").get().count;
-  const waitingQueue = db.prepare("SELECT COUNT(*) as count FROM waiting_queue WHERE status = 'waiting'").get().count;
+  const totalCustomers = db.prepare("SELECT COUNT(*) as count FROM customers").get().count;
+  const completedToday = db.prepare("SELECT COUNT(*) as count FROM sessions WHERE status = 'completed' AND DATE(start_time) = DATE('now')").get().count;
   
   const today = new Date().toISOString().slice(0, 10);
   const revenueRecord = db.prepare('SELECT total_revenue FROM daily_revenue WHERE date = ?').get(today);
@@ -56,7 +57,8 @@ router.get('/stats', authMiddleware, (req, res) => {
     active_sessions: activeSessions,
     available_terminals: availableTerminals,
     total_terminals: totalTerminals,
-    waiting_queue: waitingQueue,
+    total_customers: totalCustomers,
+    completed_today: completedToday,
     today_revenue: todayRevenue
   });
 });

@@ -1,6 +1,6 @@
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Users, Monitor, ListOrdered, IndianRupee } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Users, Monitor, UserCheck, IndianRupee, StopCircle, CheckCircle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { adminApi, revenueApi, sessionsApi, terminalsApi } from '../api';
 import PageHeader from '../components/PageHeader';
@@ -12,10 +12,12 @@ import SessionTimer from '../components/SessionTimer';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 const Dashboard = () => {
+  const queryClient = useQueryClient();
+
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['adminStats'],
     queryFn: adminApi.getStats,
-    refetchInterval: 15000
+    refetchInterval: 10000
   });
 
   const { data: terminals, isLoading: terminalsLoading } = useQuery({
@@ -33,7 +35,20 @@ const Dashboard = () => {
   const { data: dailyRevenue, isLoading: revenueLoading } = useQuery({
     queryKey: ['dailyRevenue'],
     queryFn: () => revenueApi.daily(),
-    refetchInterval: 30000
+    refetchInterval: 20000
+  });
+
+  const endSessionMutation = useMutation({
+    mutationFn: sessionsApi.endSession,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminStats'] });
+      queryClient.invalidateQueries({ queryKey: ['terminals'] });
+      queryClient.invalidateQueries({ queryKey: ['activeSessions'] });
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      queryClient.invalidateQueries({ queryKey: ['dailyRevenue'] });
+      queryClient.invalidateQueries({ queryKey: ['sessionHistorySummary'] });
+    }
   });
 
   const isLoading = statsLoading || terminalsLoading || sessionsLoading;
@@ -55,17 +70,21 @@ const Dashboard = () => {
     { 
       header: 'Customer', 
       accessorKey: 'customer_name',
-      cell: (row) => <span className="font-semibold">{row.customer_name || row.customerName || 'Customer'}</span>
+      cell: (row) => <span className="font-bold text-gray-900">{row.customer_name || row.customerName || 'Customer'}</span>
     },
     { 
       header: 'Terminal', 
       accessorKey: 'terminal_number',
-      cell: (row) => row.terminal_number || row.terminalNumber || 'N/A'
+      cell: (row) => (
+        <span className="px-2 py-0.5 rounded text-xs font-black bg-red-100 text-red-800 border border-red-200">
+          {row.terminal_number || row.terminalNumber || 'N/A'}
+        </span>
+      )
     },
     { 
       header: 'Type', 
       accessorKey: 'terminal_type_name',
-      cell: (row) => <span className="capitalize">{row.terminal_type_name || row.type || 'PC'}</span>
+      cell: (row) => <span className="capitalize font-semibold text-gray-700">{row.terminal_type_name || row.type || 'PC'}</span>
     },
     { 
       header: 'Time Remaining', 
@@ -76,6 +95,24 @@ const Dashboard = () => {
       header: 'Status',
       accessorKey: 'status',
       cell: (row) => <StatusBadge status={row.status} />
+    },
+    {
+      header: 'Action',
+      cell: (row) => (
+        <button
+          onClick={() => {
+            if (window.confirm(`Free Terminal ${row.terminal_number} and end session for ${row.customer_name}?`)) {
+              endSessionMutation.mutate(row.id);
+            }
+          }}
+          disabled={endSessionMutation.isPending}
+          className="text-red-700 hover:text-red-900 font-bold text-xs flex items-center bg-red-100 hover:bg-red-200 px-2.5 py-1 rounded-md border border-red-300 transition-colors shadow-sm disabled:opacity-50"
+          title="End session and revoke seat occupancy immediately"
+        >
+          <StopCircle className="w-3.5 h-3.5 mr-1" />
+          Free Seat
+        </button>
+      )
     }
   ];
 
@@ -101,9 +138,9 @@ const Dashboard = () => {
           icon={Monitor} 
         />
         <StatsCard 
-          title="Waiting Queue" 
-          value={stats?.waiting_queue ?? stats?.queueLength ?? 0} 
-          icon={ListOrdered} 
+          title="Total Customers" 
+          value={stats?.total_customers ?? stats?.totalCustomers ?? 0} 
+          icon={UserCheck} 
         />
         <StatsCard 
           title="Today's Revenue" 

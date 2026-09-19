@@ -21,7 +21,6 @@ const NAV_ITEMS = [
   { name: 'Terminals', path: '/terminals', icon: Monitor },
   { name: 'Allocate', path: '/allocate', icon: PlayCircle },
   { name: 'Sessions', path: '/sessions', icon: Clock },
-  { name: 'Queue', path: '/queue', icon: ListOrdered },
   { name: 'Printing', path: '/printing', icon: Printer },
   { name: 'Billing', path: '/billing', icon: Receipt },
   { name: 'Revenue', path: '/revenue', icon: LineChart },

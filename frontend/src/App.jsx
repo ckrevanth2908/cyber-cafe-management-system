@@ -8,7 +8,6 @@ import Customers from './pages/Customers';
 import Terminals from './pages/Terminals';
 import Allocate from './pages/Allocate';
 import Sessions from './pages/Sessions';
-import Queue from './pages/Queue';
 import Printing from './pages/Printing';
 import Billing from './pages/Billing';
 import Revenue from './pages/Revenue';
@@ -40,7 +39,6 @@ const App = () => {
         <Route path="/terminals" element={<Terminals />} />
         <Route path="/allocate" element={<Allocate />} />
         <Route path="/sessions" element={<Sessions />} />
-        <Route path="/queue" element={<Queue />} />
         <Route path="/printing" element={<Printing />} />
         <Route path="/billing" element={<Billing />} />
         <Route path="/revenue" element={<Revenue />} />

@@ -58,6 +58,10 @@ export const terminalsApi = {
   updateStatus: async (id, status) => {
     const response = await apiClient.patch(`/terminals/${id}/status`, { status });
     return response.data;
+  },
+  freeTerminal: async (id) => {
+    const response = await apiClient.post(`/terminals/${id}/free`);
+    return response.data;
   }
 };
 

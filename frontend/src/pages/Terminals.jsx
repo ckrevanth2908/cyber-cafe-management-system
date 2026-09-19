@@ -69,6 +69,19 @@ const Terminals = () => {
     return tType === filterType.toLowerCase();
   });
 
+  const freeTerminalMutation = useMutation({
+    mutationFn: terminalsApi.freeTerminal,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['terminals'] });
+      queryClient.invalidateQueries({ queryKey: ['activeSessions'] });
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      queryClient.invalidateQueries({ queryKey: ['adminStats'] });
+      queryClient.invalidateQueries({ queryKey: ['dailyRevenue'] });
+      queryClient.invalidateQueries({ queryKey: ['sessionHistorySummary'] });
+    }
+  });
+
   const columns = [
     { 
       header: 'Terminal No.', 
@@ -92,28 +105,41 @@ const Terminals = () => {
     },
     { 
       header: 'Actions',
-      cell: (row) => (
-        <button
-          onClick={() => {
-            if (row.status !== 'occupied') {
+      cell: (row) => {
+        if (row.status === 'occupied') {
+          return (
+            <button
+              onClick={() => {
+                if (window.confirm(`Release ${row.terminal_number} and revoke occupied status?`)) {
+                  freeTerminalMutation.mutate(row.id);
+                }
+              }}
+              disabled={freeTerminalMutation.isPending}
+              className="text-xs font-bold px-3 py-1 rounded bg-red-600 hover:bg-red-700 text-white shadow-sm transition-colors"
+              title="Click when customer leaves to free this seat"
+            >
+              Customer Left (Free Seat)
+            </button>
+          );
+        }
+        return (
+          <button
+            onClick={() => {
               toggleMaintenance.mutate({ 
                 id: row.id, 
                 status: row.status === 'maintenance' ? 'available' : 'maintenance' 
               });
-            }
-          }}
-          disabled={row.status === 'occupied'}
-          className={`text-xs font-semibold px-2.5 py-1 rounded border ${
-            row.status === 'occupied'
-              ? 'opacity-40 cursor-not-allowed bg-gray-50 border-gray-200'
-              : row.status === 'maintenance' 
+            }}
+            className={`text-xs font-semibold px-2.5 py-1 rounded border ${
+              row.status === 'maintenance' 
                 ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' 
                 : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-          }`}
-        >
-          {row.status === 'maintenance' ? 'Mark Available' : 'Set Maintenance'}
-        </button>
-      )
+            }`}
+          >
+            {row.status === 'maintenance' ? 'Mark Available' : 'Set Maintenance'}
+          </button>
+        );
+      }
     }
   ];
 

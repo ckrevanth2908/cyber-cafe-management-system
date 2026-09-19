@@ -140,9 +140,48 @@ function updateTerminalStatus(req, res) {
     return res.status(400).json({ detail: 'Cannot put occupied terminal into maintenance' });
   }
 
-  db.prepare('UPDATE terminals SET status = ? WHERE id = ?').run(status, req.params.id);
-  const updated = db.prepare('SELECT * FROM terminals WHERE id = ?').get(req.params.id);
-  return res.json(updated);
+// POST /api/v1/terminals/:id/free
+// POST /api/v1/terminals/:id/release
+router.post('/:id/free', authMiddleware, freeTerminalHandler);
+router.post('/:id/release', authMiddleware, freeTerminalHandler);
+
+function freeTerminalHandler(req, res) {
+  const terminalId = req.params.id;
+  const term = db.prepare('SELECT t.*, tt.name as type_name FROM terminals t JOIN terminal_types tt ON t.type_id = tt.id WHERE t.id = ?').get(terminalId);
+  if (!term) {
+    return res.status(404).json({ detail: 'Terminal not found' });
+  }
+
+  const activeSession = db.prepare("SELECT * FROM sessions WHERE terminal_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1").get(terminalId);
+  const now = new Date();
+
+  const freeTx = db.transaction(() => {
+    if (activeSession) {
+      const rateRow = db.prepare('SELECT rate_per_unit FROM service_rates WHERE service_type = ?').get(term.type_name.toLowerCase());
+      const hourlyRate = rateRow ? rateRow.rate_per_unit : 20.0;
+      const startTime = new Date(activeSession.start_time);
+      const actualMinutes = Math.max(1, Math.round((now.getTime() - startTime.getTime()) / 60000));
+      const charge = Number(((actualMinutes / 60) * hourlyRate).toFixed(2));
+
+      db.prepare(`
+        UPDATE sessions 
+        SET actual_end_time = ?, actual_duration_minutes = ?, status = 'completed', session_charge = ?
+        WHERE id = ?
+      `).run(now.toISOString(), actualMinutes, charge, activeSession.id);
+
+      db.prepare(`
+        UPDATE terminal_allocations 
+        SET is_active = 0, released_at = ?
+        WHERE (terminal_id = ? OR session_id = ?) AND is_active = 1
+      `).run(now.toISOString(), terminalId, activeSession.id);
+    }
+
+    db.prepare("UPDATE terminals SET status = 'available' WHERE id = ?").run(terminalId);
+  });
+
+  freeTx();
+  const updated = db.prepare('SELECT * FROM terminals WHERE id = ?').get(terminalId);
+  return res.json({ message: 'Terminal freed and seat occupancy revoked successfully', terminal: updated, session_ended: activeSession?.id || null });
 }
 
 // DELETE /api/v1/terminals/:id
