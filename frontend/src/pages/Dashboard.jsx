@@ -1,6 +1,6 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Users, Monitor, ListOrdered, DollarSign } from 'lucide-react';
+import { Users, Monitor, ListOrdered, IndianRupee } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { adminApi, revenueApi, sessionsApi, terminalsApi } from '../api';
 import PageHeader from '../components/PageHeader';
@@ -12,47 +12,65 @@ import SessionTimer from '../components/SessionTimer';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 const Dashboard = () => {
-  // Fetch data
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['adminStats'],
     queryFn: adminApi.getStats,
-    refetchInterval: 30000 // refresh every 30s
+    refetchInterval: 15000
   });
 
   const { data: terminals, isLoading: terminalsLoading } = useQuery({
     queryKey: ['terminals'],
     queryFn: terminalsApi.list,
-    refetchInterval: 30000
+    refetchInterval: 15000
   });
 
   const { data: activeSessions, isLoading: sessionsLoading } = useQuery({
     queryKey: ['activeSessions'],
     queryFn: () => sessionsApi.list({ status: 'active' }),
-    refetchInterval: 30000
+    refetchInterval: 15000
   });
 
   const { data: dailyRevenue, isLoading: revenueLoading } = useQuery({
     queryKey: ['dailyRevenue'],
     queryFn: () => revenueApi.daily(),
-    refetchInterval: 60000
+    refetchInterval: 30000
   });
 
-  const isLoading = statsLoading || terminalsLoading || sessionsLoading || revenueLoading;
+  const isLoading = statsLoading || terminalsLoading || sessionsLoading;
 
   if (isLoading) {
-    return <div className="flex h-full items-center justify-center"><LoadingSpinner size="lg" /></div>;
+    return <div className="flex h-64 items-center justify-center"><LoadingSpinner size="lg" /></div>;
   }
 
-  const chartData = dailyRevenue?.breakdown || [];
+  // Construct chart breakdown from dailyRevenue
+  const chartData = [
+    { name: 'Browsing', value: dailyRevenue?.browsing_revenue || 0 },
+    { name: 'Gaming', value: dailyRevenue?.gaming_revenue || 0 },
+    { name: 'Academic', value: dailyRevenue?.academic_revenue || 0 },
+    { name: 'Printing', value: (dailyRevenue?.plain_print_revenue || 0) + (dailyRevenue?.colour_print_revenue || 0) },
+    { name: 'Xerox', value: dailyRevenue?.xerox_revenue || 0 }
+  ].filter(item => item.value > 0);
 
   const sessionColumns = [
-    { header: 'Customer', accessorKey: 'customerName' },
-    { header: 'Terminal', accessorKey: 'terminalNumber' },
-    { header: 'Type', accessorKey: 'type' },
+    { 
+      header: 'Customer', 
+      accessorKey: 'customer_name',
+      cell: (row) => <span className="font-semibold">{row.customer_name || row.customerName || 'Customer'}</span>
+    },
+    { 
+      header: 'Terminal', 
+      accessorKey: 'terminal_number',
+      cell: (row) => row.terminal_number || row.terminalNumber || 'N/A'
+    },
+    { 
+      header: 'Type', 
+      accessorKey: 'terminal_type_name',
+      cell: (row) => <span className="capitalize">{row.terminal_type_name || row.type || 'PC'}</span>
+    },
     { 
       header: 'Time Remaining', 
-      accessorKey: 'expectedEnd',
-      cell: (row) => <SessionTimer endTime={row.expectedEnd} />
+      accessorKey: 'expected_end_time',
+      cell: (row) => <SessionTimer endTime={row.expected_end_time || row.expectedEnd} />
     },
     {
       header: 'Status',
@@ -61,43 +79,52 @@ const Dashboard = () => {
     }
   ];
 
+  const totalRev = Number(stats?.today_revenue ?? stats?.todayRevenue ?? dailyRevenue?.total_revenue ?? 0);
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Dashboard" />
+      <PageHeader 
+        title="Real-Time Dashboard" 
+        subtitle="Live computer terminal grid, active sessions, and today's financial summary"
+      />
 
-      {/* Stats Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <StatsCard 
           title="Active Sessions" 
-          value={stats?.activeSessions || 0} 
+          value={stats?.active_sessions ?? stats?.activeSessions ?? activeSessions?.length ?? 0} 
           icon={Users} 
         />
         <StatsCard 
           title="Available Terminals" 
-          value={stats?.availableTerminals || 0} 
+          value={stats?.available_terminals ?? stats?.availableTerminals ?? 0} 
           icon={Monitor} 
         />
         <StatsCard 
-          title="Queue Length" 
-          value={stats?.queueLength || 0} 
+          title="Waiting Queue" 
+          value={stats?.waiting_queue ?? stats?.queueLength ?? 0} 
           icon={ListOrdered} 
         />
         <StatsCard 
           title="Today's Revenue" 
-          value={`$${(stats?.todayRevenue || 0).toFixed(2)}`} 
-          icon={DollarSign} 
+          value={`₹${totalRev.toFixed(2)}`} 
+          icon={IndianRupee} 
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Terminals & Sessions */}
+        {/* Left 2 Cols: Terminal Grid & Live Active Sessions */}
         <div className="lg:col-span-2 space-y-6">
           
           <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">Terminal Status</h3>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-gray-800">Terminal Availability Grid</h3>
+              <span className="text-xs text-gray-500">Live Status (Available / Occupied / Maintenance)</span>
+            </div>
+            
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {terminals?.map(terminal => {
-                const session = activeSessions?.find(s => s.terminalId === terminal.id);
+                const session = activeSessions?.find(s => s.terminal_id === terminal.id || s.terminalId === terminal.id);
                 return (
                   <TerminalCard 
                     key={terminal.id} 
@@ -110,7 +137,7 @@ const Dashboard = () => {
           </div>
 
           <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">Active Sessions</h3>
+            <h3 className="text-lg font-bold text-gray-800 mb-4">Live Active Sessions</h3>
             <DataTable 
               columns={sessionColumns} 
               data={activeSessions || []} 
@@ -120,24 +147,49 @@ const Dashboard = () => {
 
         </div>
 
-        {/* Right Column: Revenue Chart */}
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-          <h3 className="text-lg font-bold text-gray-800 mb-4">Revenue Breakdown</h3>
-          <div className="h-80 w-full">
-            {chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData}>
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="value" fill="#1e40af" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex h-full items-center justify-center text-gray-500">
-                No revenue data for today.
-              </div>
-            )}
+        {/* Right 1 Col: Today's Revenue Breakdown */}
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 flex flex-col justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-gray-800 mb-1">Today's Revenue Breakdown</h3>
+            <p className="text-xs text-gray-500 mb-4">Service-wise earnings in ₹ (INR)</p>
+            
+            <div className="h-64 w-full">
+              {chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData}>
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip formatter={(val) => [`₹${Number(val).toFixed(2)}`, 'Revenue']} />
+                    <Bar dataKey="value" fill="#1e40af" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex flex-col h-full items-center justify-center text-gray-400 text-sm">
+                  <span>No completed transactions today yet.</span>
+                  <span className="text-xs mt-1">Complete a session or print job to view breakdown.</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Quick breakdown list */}
+          <div className="mt-4 pt-4 border-t border-gray-100 space-y-2 text-xs">
+            <div className="flex justify-between text-gray-600">
+              <span>Browsing Systems:</span>
+              <span className="font-semibold text-gray-900">₹{(dailyRevenue?.browsing_revenue || 0).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-gray-600">
+              <span>Gaming Systems:</span>
+              <span className="font-semibold text-gray-900">₹{(dailyRevenue?.gaming_revenue || 0).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-gray-600">
+              <span>Academic Systems:</span>
+              <span className="font-semibold text-gray-900">₹{(dailyRevenue?.academic_revenue || 0).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-gray-600">
+              <span>Printing & Xerox:</span>
+              <span className="font-semibold text-gray-900">₹{((dailyRevenue?.plain_print_revenue || 0) + (dailyRevenue?.colour_print_revenue || 0) + (dailyRevenue?.xerox_revenue || 0)).toFixed(2)}</span>
+            </div>
           </div>
         </div>
       </div>

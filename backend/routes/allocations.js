@@ -3,29 +3,56 @@ const router = express.Router();
 const { db } = require('../database/db');
 const { authMiddleware } = require('../middleware/auth');
 
-// Helper to calculate session charges
 function calculateSessionCharge(durationMinutes, ratePerHour) {
   return Number(((durationMinutes / 60) * ratePerHour).toFixed(2));
 }
 
 // POST /api/v1/allocations
 router.post('/', authMiddleware, (req, res) => {
-  const { customer_id, terminal_type_id, duration_minutes, terminal_id } = req.body;
-  if (!customer_id || !terminal_type_id || !duration_minutes) {
-    return res.status(400).json({ detail: 'Customer, system type, and expected duration are required' });
+  const customerId = req.body.customer_id || req.body.customerId;
+  let terminalTypeId = req.body.terminal_type_id || req.body.terminalTypeId;
+  const durationMinutes = parseInt(req.body.duration_minutes || req.body.durationMinutes || req.body.duration || req.body.expectedDurationMinutes || 60, 10);
+  let terminalId = req.body.terminal_id || req.body.terminalId;
+  const systemType = (req.body.system_type || req.body.systemType || '').toLowerCase();
+
+  if (!customerId) {
+    return res.status(400).json({ detail: 'Please select a customer' });
   }
 
-  // Check customer age restriction if gaming
-  const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(customer_id);
+  // Resolve terminal type ID if systemType name provided
+  if (!terminalTypeId && systemType) {
+    const typeRow = db.prepare('SELECT id FROM terminal_types WHERE LOWER(name) = ?').get(systemType);
+    if (typeRow) {
+      terminalTypeId = typeRow.id;
+    }
+  }
+
+  // If specific terminal provided, get its type ID
+  if (terminalId && !terminalTypeId) {
+    const termRow = db.prepare('SELECT type_id FROM terminals WHERE id = ?').get(terminalId);
+    if (termRow) {
+      terminalTypeId = termRow.type_id;
+    }
+  }
+
+  if (!terminalTypeId) {
+    // Default to first terminal type (Browsing)
+    const firstType = db.prepare('SELECT id FROM terminal_types LIMIT 1').get();
+    terminalTypeId = firstType ? firstType.id : 1;
+  }
+
+  // Check customer existence
+  const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(customerId);
   if (!customer) {
-    return res.status(404).json({ detail: 'Customer not found' });
+    return res.status(404).json({ detail: 'Selected customer was not found' });
   }
 
-  const termType = db.prepare('SELECT * FROM terminal_types WHERE id = ?').get(terminal_type_id);
+  const termType = db.prepare('SELECT * FROM terminal_types WHERE id = ?').get(terminalTypeId);
   if (!termType) {
     return res.status(404).json({ detail: 'Terminal type not found' });
   }
 
+  // Age restriction check for Gaming
   const config = db.prepare('SELECT age_restriction_gaming FROM system_config LIMIT 1').get();
   if (termType.name.toLowerCase() === 'gaming' && config && config.age_restriction_gaming) {
     if (customer.age < config.age_restriction_gaming) {
@@ -35,58 +62,58 @@ router.post('/', authMiddleware, (req, res) => {
     }
   }
 
-  // Find available terminal
+  // Find suitable available terminal
   let term;
-  if (terminal_id) {
-    term = db.prepare('SELECT * FROM terminals WHERE id = ? AND status = ?').get(terminal_id, 'available');
+  if (terminalId) {
+    term = db.prepare('SELECT * FROM terminals WHERE id = ? AND status = ?').get(terminalId, 'available');
   } else {
-    term = db.prepare('SELECT * FROM terminals WHERE type_id = ? AND status = ? ORDER BY id ASC LIMIT 1').get(terminal_type_id, 'available');
+    term = db.prepare('SELECT * FROM terminals WHERE type_id = ? AND status = ? ORDER BY terminal_number ASC LIMIT 1').get(terminalTypeId, 'available');
   }
 
   if (!term) {
-    return res.status(400).json({ detail: 'No available terminals for the selected type' });
+    return res.status(400).json({ detail: `No available ${termType.name} terminals. You can add the customer to the waiting queue.` });
   }
 
-  // Get rate
+  // Get hourly rate
   const rateRow = db.prepare('SELECT rate_per_unit FROM service_rates WHERE service_type = ?').get(termType.name.toLowerCase());
   const hourlyRate = rateRow ? rateRow.rate_per_unit : 20.0;
 
   const startTime = new Date();
-  const expectedEndTime = new Date(startTime.getTime() + duration_minutes * 60000);
+  const expectedEndTime = new Date(startTime.getTime() + durationMinutes * 60000);
 
-  // DB Transaction for atomic allocation
+  // Atomic Allocation Transaction
   const allocateTx = db.transaction(() => {
     // 1. Create Session
     const sessionRes = db.prepare(`
       INSERT INTO sessions (customer_id, terminal_id, start_time, expected_end_time, expected_duration_minutes, status, session_charge)
       VALUES (?, ?, ?, ?, ?, 'active', 0)
-    `).run(customer_id, term.id, startTime.toISOString(), expectedEndTime.toISOString(), duration_minutes);
+    `).run(customerId, term.id, startTime.toISOString(), expectedEndTime.toISOString(), durationMinutes);
 
     const sessionId = sessionRes.lastInsertRowid;
 
-    // 2. Mark terminal as occupied
+    // 2. Mark Terminal as Occupied
     db.prepare("UPDATE terminals SET status = 'occupied' WHERE id = ?").run(term.id);
 
-    // 3. Create Terminal Allocation record
+    // 3. Create Allocation record
     const allocRes = db.prepare(`
       INSERT INTO terminal_allocations (terminal_id, session_id, customer_id, allocated_at, is_active)
       VALUES (?, ?, ?, ?, 1)
-    `).run(term.id, sessionId, customer_id, startTime.toISOString());
+    `).run(term.id, sessionId, customerId, startTime.toISOString());
 
-    // 4. If customer was in waiting queue, mark as allocated
-    db.prepare("UPDATE waiting_queue SET status = 'allocated' WHERE customer_id = ? AND terminal_type_id = ? AND status = 'waiting'").run(customer_id, terminal_type_id);
+    // 4. Mark queue entry as allocated if existing
+    db.prepare("UPDATE waiting_queue SET status = 'allocated' WHERE customer_id = ? AND terminal_type_id = ? AND status = 'waiting'").run(customerId, terminalTypeId);
 
     return {
       id: allocRes.lastInsertRowid,
       terminal_id: term.id,
       session_id: sessionId,
-      customer_id: customer_id,
+      customer_id: customerId,
       terminal_number: term.terminal_number,
       terminal_type_name: termType.name,
       customer_name: customer.name,
       start_time: startTime.toISOString(),
       expected_end_time: expectedEndTime.toISOString(),
-      expected_duration_minutes: duration_minutes,
+      expected_duration_minutes: durationMinutes,
       hourly_rate: hourlyRate,
       status: 'active'
     };
@@ -97,7 +124,7 @@ router.post('/', authMiddleware, (req, res) => {
     return res.status(201).json(allocation);
   } catch (err) {
     console.error('Allocation error:', err);
-    return res.status(500).json({ detail: 'Failed to allocate terminal' });
+    return res.status(500).json({ detail: 'Failed to allocate terminal: ' + err.message });
   }
 });
 
@@ -135,21 +162,18 @@ router.post('/:id/release', authMiddleware, (req, res) => {
   const charge = calculateSessionCharge(actualMinutes, hourlyRate);
 
   const releaseTx = db.transaction(() => {
-    // 1. End session
     db.prepare(`
       UPDATE sessions 
       SET actual_end_time = ?, actual_duration_minutes = ?, status = 'completed', session_charge = ?
       WHERE id = ?
     `).run(now.toISOString(), actualMinutes, charge, session.id);
 
-    // 2. Mark allocation inactive
     db.prepare(`
       UPDATE terminal_allocations 
       SET is_active = 0, released_at = ?
       WHERE id = ?
     `).run(now.toISOString(), alloc.id);
 
-    // 3. Mark terminal available
     db.prepare("UPDATE terminals SET status = 'available' WHERE id = ?").run(alloc.terminal_id);
   });
 
