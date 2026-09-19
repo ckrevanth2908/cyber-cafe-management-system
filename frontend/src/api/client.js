@@ -1,6 +1,10 @@
 import axios from 'axios';
 
-let rawBase = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? '/api/v1' : 'http://localhost:5000/api/v1');
+// Live production Render backend URL
+const DEFAULT_API_URL = 'https://cyber-cafe-management-system-1-tv7h.onrender.com/api/v1';
+
+let rawBase = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_URL;
+
 if (rawBase && !rawBase.endsWith('/api/v1')) {
   rawBase = rawBase.replace(/\/+$/, '') + '/api/v1';
 }
@@ -10,18 +14,23 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json'
   },
-  timeout: 15000 // 15 seconds timeout
+  timeout: 20000
 });
 
-// Clean response interceptor: return data directly, log errors cleanly without redirect loops
+// Response interceptor: ensure data is parsed JSON and log cleanly
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Sanity check: if server returned HTML index page instead of JSON, treat as error
+    if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
+      return Promise.reject(new Error('Received HTML instead of JSON API response.'));
+    }
+    return response;
+  },
   (error) => {
-    // Log network/backend status in console for debugging
     if (error.response) {
-      console.warn(`[API] ${error.config?.method?.toUpperCase()} ${error.config?.url} returned ${error.response.status}`);
+      console.warn(`[API] ${error.config?.method?.toUpperCase()} ${error.config?.url} -> ${error.response.status}`);
     } else {
-      console.warn(`[API Network Error] ${error.message}`);
+      console.warn(`[API Error] ${error.message}`);
     }
     return Promise.reject(error);
   }

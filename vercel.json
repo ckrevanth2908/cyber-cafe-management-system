@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/api/v1/(.*)",
+      "destination": "https://cyber-cafe-management-system-1-tv7h.onrender.com/api/v1/$1"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "https://cyber-cafe-management-system-1-tv7h.onrender.com/api/$1"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
