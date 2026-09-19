@@ -2,25 +2,47 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { PlayCircle, StopCircle, Receipt } from 'lucide-react';
+import { 
+  PlayCircle, 
+  StopCircle, 
+  Receipt, 
+  Search, 
+  History, 
+  Clock, 
+  CheckCircle, 
+  IndianRupee, 
+  Download, 
+  Filter 
+} from 'lucide-react';
 import { sessionsApi } from '../api';
 import PageHeader from '../components/PageHeader';
 import DataTable from '../components/DataTable';
 import StatusBadge from '../components/StatusBadge';
 import SessionTimer from '../components/SessionTimer';
 import ConfirmDialog from '../components/ConfirmDialog';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const Sessions = () => {
-  const [tab, setTab] = useState('active'); // active, completed, all
+  const [tab, setTab] = useState('active'); // active, history, completed, all
+  const [searchTerm, setSearchTerm] = useState('');
   const [sessionToCancel, setSessionToCancel] = useState(null);
   
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const { data: sessions, isLoading } = useQuery({
-    queryKey: ['sessions', tab],
-    queryFn: () => sessionsApi.list(tab !== 'all' ? { status: tab } : {}),
-    refetchInterval: tab === 'active' ? 10000 : false
+    queryKey: ['sessions', tab, searchTerm],
+    queryFn: () => sessionsApi.list({ 
+      status: tab === 'history' || tab === 'all' ? undefined : tab,
+      search: searchTerm || undefined 
+    }),
+    refetchInterval: tab === 'active' ? 5000 : 15000
+  });
+
+  const { data: summaryStats } = useQuery({
+    queryKey: ['sessionHistorySummary'],
+    queryFn: sessionsApi.historySummary,
+    refetchInterval: 15000
   });
 
   const endSessionMutation = useMutation({
@@ -32,22 +54,56 @@ const Sessions = () => {
       queryClient.invalidateQueries({ queryKey: ['customers'] });
       queryClient.invalidateQueries({ queryKey: ['adminStats'] });
       queryClient.invalidateQueries({ queryKey: ['dailyRevenue'] });
+      queryClient.invalidateQueries({ queryKey: ['sessionHistorySummary'] });
       setSessionToCancel(null);
     }
   });
+
+  const handleExportCSV = () => {
+    if (!sessions || sessions.length === 0) {
+      alert('No session records to export.');
+      return;
+    }
+    const headers = ['Session ID', 'Customer Name', 'Phone', 'Terminal No', 'Type', 'Start Time', 'End Time', 'Duration (Mins)', 'Charge (INR)', 'Status', 'Payment Status', 'Receipt Number'];
+    const rows = sessions.map(s => [
+      `#${s.id}`,
+      `"${s.customer_name || s.customerName || 'Customer'}"`,
+      `"${s.customer_phone || ''}"`,
+      s.terminal_number || s.terminalNumber || 'PC',
+      s.terminal_type_name || s.type || 'Standard',
+      s.start_time || '',
+      s.actual_end_time || s.expected_end_time || '',
+      s.actual_duration_minutes || s.expected_duration_minutes || 0,
+      Number(s.session_charge || s.sessionCharge || 0).toFixed(2),
+      s.status || '',
+      s.payment_status || (s.status === 'completed' ? 'paid' : 'pending'),
+      s.receipt_number || 'N/A'
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `cybercafe_session_history_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const columns = [
     { 
       header: 'ID', 
       accessorKey: 'id', 
-      cell: (row) => <span className="font-mono text-xs font-bold text-gray-500">#{row.id}</span>
+      cell: (row) => <span className="font-mono text-xs font-bold text-gray-600">#{row.id}</span>
     },
     { 
       header: 'Customer', 
       accessorKey: 'customer_name',
       cell: (row) => (
         <div>
-          <span className="font-semibold text-gray-900 block">{row.customer_name || row.customerName || 'Customer'}</span>
+          <span className={`font-bold block text-sm ${row.status === 'active' ? 'text-red-700' : 'text-gray-900'}`}>
+            {row.customer_name || row.customerName || 'Customer'}
+          </span>
           <span className="text-xs text-gray-500">{row.customer_phone || row.phone || ''}</span>
         </div>
       )
@@ -55,31 +111,44 @@ const Sessions = () => {
     { 
       header: 'Terminal', 
       accessorKey: 'terminal_number',
-      cell: (row) => <span className="font-bold text-primary">{row.terminal_number || row.terminalNumber || 'PC'}</span>
+      cell: (row) => (
+        <span className={`px-2 py-0.5 rounded text-xs font-black ${
+          row.status === 'active' ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-gray-100 text-gray-800'
+        }`}>
+          {row.terminal_number || row.terminalNumber || 'PC'}
+        </span>
+      )
     },
     { 
-      header: 'System Type', 
+      header: 'Category', 
       accessorKey: 'terminal_type_name', 
-      cell: (row) => <span className="capitalize px-2 py-0.5 bg-gray-100 rounded text-xs font-semibold">{row.terminal_type_name || row.type || 'Standard'}</span> 
+      cell: (row) => <span className="capitalize text-xs font-semibold text-gray-700">{row.terminal_type_name || row.type || 'Standard'}</span> 
     },
     { 
-      header: 'Start Time', 
+      header: 'Start Date & Time', 
       accessorKey: 'start_time',
-      cell: (row) => format(new Date(row.start_time || row.startTime || Date.now()), 'hh:mm a')
+      cell: (row) => (
+        <div className="text-xs text-gray-700">
+          <span className="font-medium block">{format(new Date(row.start_time || Date.now()), 'dd MMM yyyy')}</span>
+          <span className="text-gray-500">{format(new Date(row.start_time || Date.now()), 'hh:mm a')}</span>
+        </div>
+      )
     },
     { 
-      header: 'Time Remaining', 
+      header: 'Duration / Timer', 
       accessorKey: 'expected_end_time',
       cell: (row) => row.status === 'active' ? (
         <SessionTimer endTime={row.expected_end_time || row.expectedEnd} />
       ) : (
-        <span className="text-xs text-gray-500">{row.actual_duration_minutes || row.expected_duration_minutes || 0} mins</span>
+        <span className="text-xs font-semibold text-gray-700 bg-gray-50 px-2 py-0.5 rounded border border-gray-200">
+          {row.actual_duration_minutes || row.expected_duration_minutes || 0} mins
+        </span>
       )
     },
     { 
-      header: 'Charge', 
+      header: 'Charge (₹)', 
       accessorKey: 'session_charge',
-      cell: (row) => <span className="font-bold text-gray-900">₹{Number(row.session_charge || row.sessionCharge || 0).toFixed(2)}</span>
+      cell: (row) => <span className="font-black text-primary text-sm">₹{Number(row.session_charge || row.sessionCharge || 0).toFixed(2)}</span>
     },
     { 
       header: 'Status', 
@@ -93,18 +162,18 @@ const Sessions = () => {
           {row.status === 'active' ? (
             <button
               onClick={() => setSessionToCancel(row)}
-              className="text-red-600 hover:text-red-800 font-semibold text-xs flex items-center bg-red-50 px-2 py-1 rounded border border-red-200"
+              className="text-red-700 hover:text-red-900 font-bold text-xs flex items-center bg-red-100/70 hover:bg-red-200 px-2.5 py-1 rounded-md border border-red-300 transition-colors shadow-sm"
             >
               <StopCircle className="w-3.5 h-3.5 mr-1" />
-              End Early
+              End Session
             </button>
           ) : (
             <button
               onClick={() => navigate('/billing')}
-              className="text-primary hover:text-primary-dark font-semibold text-xs flex items-center bg-blue-50 px-2 py-1 rounded border border-blue-200"
+              className="text-primary hover:text-primary-dark font-bold text-xs flex items-center bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-md border border-blue-200 transition-colors"
             >
               <Receipt className="w-3.5 h-3.5 mr-1" />
-              Bill
+              Invoice
             </button>
           )}
         </div>
@@ -115,40 +184,110 @@ const Sessions = () => {
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       <PageHeader 
-        title="Active & Historical Sessions" 
-        subtitle="Live tracking of allocated computer terminals, live countdown timers, and early session release"
+        title="Session Tracking & History Logs" 
+        subtitle="Live tracking of running computer sessions and comprehensive historical session logs with financial charges in ₹"
         action={
-          <button
-            onClick={() => navigate('/allocate')}
-            className="flex items-center px-4 py-2 bg-primary text-white rounded-lg text-sm font-semibold shadow-sm hover:bg-primary-dark"
-          >
-            <PlayCircle className="w-4 h-4 mr-2" />
-            New Allocation
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center px-3.5 py-2 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 text-xs font-bold shadow-sm"
+            >
+              <Download className="w-3.5 h-3.5 mr-1.5" />
+              Export History CSV
+            </button>
+            <button
+              onClick={() => navigate('/allocate')}
+              className="flex items-center px-4 py-2 bg-primary text-white rounded-lg text-xs font-bold shadow-sm hover:bg-primary-dark"
+            >
+              <PlayCircle className="w-4 h-4 mr-1.5" />
+              + New Allocation
+            </button>
+          </div>
         }
       />
 
-      <div className="flex space-x-2 border-b border-gray-200">
-        {[
-          { id: 'active', label: 'Active Running Sessions' },
-          { id: 'completed', label: 'Completed Sessions' },
-          { id: 'all', label: 'All Session History' }
-        ].map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`py-2.5 px-4 font-bold text-sm transition-all border-b-2 ${
-              tab === t.id
-                ? 'border-primary text-primary'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+      {/* Historical Summary Metric Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+          <div className="flex items-center space-x-2 text-gray-500 text-xs font-bold uppercase">
+            <History className="w-4 h-4 text-primary" />
+            <span>Total Sessions</span>
+          </div>
+          <p className="text-2xl font-black text-gray-900 mt-2">{summaryStats?.total_sessions || sessions?.length || 0}</p>
+          <span className="text-xs text-gray-400">All-time lifetime records</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+          <div className="flex items-center space-x-2 text-gray-500 text-xs font-bold uppercase">
+            <PlayCircle className="w-4 h-4 text-green-600" />
+            <span>Active Running</span>
+          </div>
+          <p className="text-2xl font-black text-green-700 mt-2">{summaryStats?.active_sessions || 0}</p>
+          <span className="text-xs text-green-600 font-medium">Currently occupied PCs</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+          <div className="flex items-center space-x-2 text-gray-500 text-xs font-bold uppercase">
+            <Clock className="w-4 h-4 text-amber-600" />
+            <span>Total Hours Logged</span>
+          </div>
+          <p className="text-2xl font-black text-gray-900 mt-2">
+            {((summaryStats?.total_duration_minutes || 0) / 60).toFixed(1)} hrs
+          </p>
+          <span className="text-xs text-gray-400">{summaryStats?.total_duration_minutes || 0} total minutes</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+          <div className="flex items-center space-x-2 text-gray-500 text-xs font-bold uppercase">
+            <IndianRupee className="w-4 h-4 text-primary" />
+            <span>Session Revenue</span>
+          </div>
+          <p className="text-2xl font-black text-primary mt-2">
+            ₹{Number(summaryStats?.total_charges || 0).toFixed(2)}
+          </p>
+          <span className="text-xs text-gray-400">Total computer tariffs</span>
+        </div>
       </div>
 
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+      {/* Tabs & Search Bar */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 space-y-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="flex flex-wrap gap-1 bg-gray-100 p-1 rounded-lg border border-gray-200 text-xs font-bold">
+            {[
+              { id: 'active', label: '⚡ Active Live Sessions' },
+              { id: 'history', label: '📜 Session History & Logs' },
+              { id: 'completed', label: '✅ Completed Sessions' },
+              { id: 'all', label: '🌐 All Records' }
+            ].map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`py-1.5 px-3.5 rounded-md transition-all ${
+                  tab === t.id
+                    ? 'bg-white text-primary shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/60'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="relative w-full md:w-72">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-4 w-4 text-gray-400" />
+            </div>
+            <input
+              type="text"
+              placeholder="Search by customer, phone, terminal..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg text-xs bg-white placeholder-gray-400 focus:outline-none focus:ring-primary focus:border-primary"
+            />
+          </div>
+        </div>
+
+        {/* Sessions Table */}
         <DataTable 
           columns={columns} 
           data={sessions || []} 

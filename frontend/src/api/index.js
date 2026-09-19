@@ -122,6 +122,10 @@ export const sessionsApi = {
   endSession: async (id) => {
     const response = await apiClient.post(`/sessions/${id}/end`);
     return response.data;
+  },
+  historySummary: async () => {
+    const response = await apiClient.get('/sessions/history-summary');
+    return response.data;
   }
 };
 

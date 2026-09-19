@@ -5,21 +5,33 @@ const { authMiddleware } = require('../middleware/auth');
 
 // GET /api/v1/sessions
 router.get('/', authMiddleware, (req, res) => {
-  const { status } = req.query;
+  const { status, search, customer_id } = req.query;
   let query = `
-    SELECT s.*, c.name as customer_name, c.phone as customer_phone,
-           t.terminal_number, tt.name as terminal_type_name
+    SELECT s.*, c.name as customer_name, c.phone as customer_phone, c.email as customer_email,
+           t.terminal_number, tt.name as terminal_type_name,
+           p.receipt_number, p.payment_method, p.status as payment_status
     FROM sessions s
     JOIN customers c ON s.customer_id = c.id
     JOIN terminals t ON s.terminal_id = t.id
     JOIN terminal_types tt ON t.type_id = tt.id
+    LEFT JOIN payments p ON p.session_id = s.id
     WHERE 1=1
   `;
   const params = [];
 
-  if (status) {
+  if (status && status !== 'all') {
     query += ' AND s.status = ?';
     params.push(status);
+  }
+
+  if (customer_id) {
+    query += ' AND s.customer_id = ?';
+    params.push(customer_id);
+  }
+
+  if (search) {
+    query += ' AND (c.name LIKE ? OR c.phone LIKE ? OR t.terminal_number LIKE ?)';
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
   }
 
   query += ' ORDER BY s.id DESC';
@@ -42,6 +54,20 @@ router.get('/active', authMiddleware, (req, res) => {
     ORDER BY s.id DESC
   `).all();
   return res.json(active);
+});
+
+// GET /api/v1/sessions/history-summary
+router.get('/history-summary', authMiddleware, (req, res) => {
+  const stats = db.prepare(`
+    SELECT 
+      COUNT(*) as total_sessions,
+      COUNT(CASE WHEN status = 'active' THEN 1 END) as active_sessions,
+      COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_sessions,
+      COALESCE(SUM(session_charge), 0) as total_charges,
+      COALESCE(SUM(actual_duration_minutes), 0) as total_duration_minutes
+    FROM sessions
+  `).get();
+  return res.json(stats);
 });
 
 // GET /api/v1/sessions/:id
