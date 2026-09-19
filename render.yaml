@@ -1,17 +1,11 @@
-﻿services:
+services:
   - type: web
     name: cyber-cafe-management-system
     env: node
     plan: free
     region: oregon
-    buildCommand: npm run build
-    startCommand: npm start
+    buildCommand: npm --prefix backend install
+    startCommand: node backend/server.js
     envVars:
       - key: NODE_VERSION
         value: 20
-      - key: JWT_SECRET
-        generateValue: true
-      - key: ADMIN_USERNAME
-        value: admin
-      - key: ADMIN_PASSWORD
-        value: admin123
