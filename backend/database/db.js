@@ -1,15 +1,93 @@
-const Database = require('better-sqlite3');
-const path = require('path');
+const initSqlJs = require('sql.js');
 const fs = require('fs');
+const path = require('path');
+const bcrypt = require('bcryptjs');
 
-const dbDir = path.dirname(process.env.DB_PATH || './database/cybercafe.db');
+const dbFilePath = path.resolve(process.env.DB_PATH || './database/cybercafe.db');
+const dbDir = path.dirname(dbFilePath);
 if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
 
-const db = new Database(process.env.DB_PATH || './database/cybercafe.db');
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+let rawDb = null;
 
-function initDB() {
+function saveDbToDisk() {
+  if (!rawDb) return;
+  try {
+    const data = rawDb.export();
+    const buffer = Buffer.from(data);
+    fs.writeFileSync(dbFilePath, buffer);
+  } catch (err) {
+    console.error('Error persisting database to disk:', err);
+  }
+}
+
+// Wrapper to mimic synchronous prepare().all(), prepare().get(), prepare().run()
+const db = {
+  exec(sql) {
+    if (!rawDb) throw new Error('Database not initialized');
+    rawDb.exec(sql);
+    saveDbToDisk();
+  },
+  prepare(sql) {
+    return {
+      all(...params) {
+        if (!rawDb) throw new Error('Database not initialized');
+        const stmt = rawDb.prepare(sql);
+        stmt.bind(params);
+        const rows = [];
+        while (stmt.step()) {
+          rows.push(stmt.getAsObject());
+        }
+        stmt.free();
+        return rows;
+      },
+      get(...params) {
+        if (!rawDb) throw new Error('Database not initialized');
+        const stmt = rawDb.prepare(sql);
+        stmt.bind(params);
+        let result = null;
+        if (stmt.step()) {
+          result = stmt.getAsObject();
+        }
+        stmt.free();
+        return result;
+      },
+      run(...params) {
+        if (!rawDb) throw new Error('Database not initialized');
+        rawDb.run(sql, params);
+        const lastIdRes = rawDb.exec('SELECT last_insert_rowid() as id');
+        const lastInsertRowid = lastIdRes.length && lastIdRes[0].values.length ? lastIdRes[0].values[0][0] : null;
+        saveDbToDisk();
+        return { lastInsertRowid };
+      }
+    };
+  },
+  transaction(fn) {
+    return (...args) => {
+      if (!rawDb) throw new Error('Database not initialized');
+      rawDb.exec('BEGIN TRANSACTION;');
+      try {
+        const result = fn(...args);
+        rawDb.exec('COMMIT;');
+        saveDbToDisk();
+        return result;
+      } catch (err) {
+        rawDb.exec('ROLLBACK;');
+        throw err;
+      }
+    };
+  }
+};
+
+async function initDB() {
+  const SQL = await initSqlJs();
+  if (fs.existsSync(dbFilePath)) {
+    const fileBuffer = fs.readFileSync(dbFilePath);
+    rawDb = new SQL.Database(fileBuffer);
+  } else {
+    rawDb = new SQL.Database();
+  }
+
+  // Create Tables
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -165,8 +243,7 @@ function initDB() {
     );
   `);
 
-  // Seed admin user
-  const bcrypt = require('bcryptjs');
+  // Seed default admin user if not exists
   const adminUser = db.prepare('SELECT id FROM users WHERE username = ?').get(process.env.ADMIN_USERNAME || 'admin');
   if (!adminUser) {
     const hash = bcrypt.hashSync(process.env.ADMIN_PASSWORD || 'admin123', 10);
@@ -181,6 +258,16 @@ function initDB() {
     db.prepare('INSERT INTO terminal_types (name, description) VALUES (?, ?)').run('Browsing', 'Standard internet browsing');
     db.prepare('INSERT INTO terminal_types (name, description) VALUES (?, ?)').run('Gaming', 'High-performance gaming systems');
     db.prepare('INSERT INTO terminal_types (name, description) VALUES (?, ?)').run('Academic', 'Quiet academic zone');
+  }
+
+  // Seed default terminals if empty
+  const existingTerms = db.prepare('SELECT id FROM terminals').all();
+  if (existingTerms.length === 0) {
+    db.prepare('INSERT INTO terminals (terminal_number, type_id, specifications, status) VALUES (?, ?, ?, ?)').run('B-01', 1, 'Core i5, 16GB RAM, 100Mbps', 'available');
+    db.prepare('INSERT INTO terminals (terminal_number, type_id, specifications, status) VALUES (?, ?, ?, ?)').run('B-02', 1, 'Core i5, 16GB RAM, 100Mbps', 'available');
+    db.prepare('INSERT INTO terminals (terminal_number, type_id, specifications, status) VALUES (?, ?, ?, ?)').run('G-01', 2, 'RTX 4070, Ryzen 7, 32GB RAM, 240Hz', 'available');
+    db.prepare('INSERT INTO terminals (terminal_number, type_id, specifications, status) VALUES (?, ?, ?, ?)').run('G-02', 2, 'RTX 4070, Ryzen 7, 32GB RAM, 240Hz', 'available');
+    db.prepare('INSERT INTO terminals (terminal_number, type_id, specifications, status) VALUES (?, ?, ?, ?)').run('A-01', 3, 'Core i3, 8GB RAM, Office Suite', 'available');
   }
 
   // Seed service rates
@@ -209,7 +296,7 @@ function initDB() {
     db.prepare('INSERT INTO printers (name, printer_type, specifications) VALUES (?, ?, ?)').run('Canon IR2204', 'xerox', 'Photocopier, 22ppm');
   }
 
-  console.log('✅ Database initialized and seeded');
+  console.log('✅ SQLite Database initialized and seeded successfully');
 }
 
 module.exports = { db, initDB };
