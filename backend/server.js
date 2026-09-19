@@ -29,9 +29,24 @@ app.use('/api/v1/printing', require('./routes/printing'));
 app.use('/api/v1/billing', require('./routes/billing'));
 app.use('/api/v1/revenue', require('./routes/revenue'));
 
-app.get('/', (req, res) => {
-  res.json({ message: 'Cyber Cafe Management API (Node.js)', version: '1.0.0', status: 'running' });
-});
+const path = require('path');
+const fs = require('fs');
+
+// Static Frontend Serving (in Production / on Render)
+const frontendDistPath = path.resolve(__dirname, '../frontend/dist');
+if (fs.existsSync(frontendDistPath)) {
+  app.use(express.static(frontendDistPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+    res.sendFile(path.join(frontendDistPath, 'index.html'));
+  });
+} else {
+  app.get('/', (req, res) => {
+    res.json({ message: 'Cyber Cafe Management API (Node.js)', version: '1.0.0', status: 'running' });
+  });
+}
 
 async function startServer() {
   await initDB();
