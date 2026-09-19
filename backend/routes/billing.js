@@ -26,21 +26,19 @@ router.get('/preview/:session_id', (req, res) => {
       return res.status(404).json({ detail: 'Session not found' });
     }
 
-    // Determine current duration & charge
-    let durationMinutes = session.actual_duration_minutes || session.expected_duration_minutes;
-    let sessionCharge = session.session_charge;
+    let durationMinutes = session.actual_duration_minutes || session.expected_duration_minutes || 0;
+    let sessionCharge = session.session_charge || 0;
 
     if (session.status === 'active') {
       const now = new Date();
       const startTime = new Date(session.start_time);
       durationMinutes = Math.max(1, Math.round((now.getTime() - startTime.getTime()) / 60000));
       
-      const rateRow = db.prepare('SELECT rate_per_unit FROM service_rates WHERE service_type = ?').get(session.terminal_type_name.toLowerCase());
+      const rateRow = db.prepare('SELECT rate_per_unit FROM service_rates WHERE service_type = ?').get((session.terminal_type_name || 'browsing').toLowerCase());
       const hourlyRate = rateRow ? rateRow.rate_per_unit : 20.0;
       sessionCharge = Number(((durationMinutes / 60) * hourlyRate).toFixed(2));
     }
 
-    // Unpaid print jobs for this customer
     const unpaidPrints = db.prepare(`
       SELECT pt.*, p.name as printer_name
       FROM print_transactions pt
@@ -48,13 +46,14 @@ router.get('/preview/:session_id', (req, res) => {
       WHERE pt.customer_id = ? AND pt.created_at >= ?
     `).all(session.customer_id, session.start_time);
 
-    const printCharge = unpaidPrints.reduce((sum, p) => sum + p.total_amount, 0);
+    const printCharge = unpaidPrints.reduce((sum, p) => sum + (p.total_amount || 0), 0);
     const totalAmount = Number((sessionCharge + printCharge).toFixed(2));
 
     return res.json({
       session_id: session.id,
       customer_id: session.customer_id,
       customer_name: session.customer_name,
+      customer_phone: session.customer_phone,
       terminal_number: session.terminal_number,
       terminal_type_name: session.terminal_type_name,
       start_time: session.start_time,
@@ -76,7 +75,7 @@ router.post('/finalize/:session_id', (req, res) => {
     const { payment_method, method } = req.body;
     const selectedPaymentMethod = payment_method || method || 'cash';
     const session = db.prepare(`
-      SELECT s.*, c.name as customer_name, tt.name as terminal_type_name
+      SELECT s.*, c.name as customer_name, c.phone as customer_phone, tt.name as terminal_type_name
       FROM sessions s
       JOIN customers c ON s.customer_id = c.id
       JOIN terminals t ON s.terminal_id = t.id
@@ -88,17 +87,21 @@ router.post('/finalize/:session_id', (req, res) => {
       return res.status(404).json({ detail: 'Session not found' });
     }
 
-    // Check if already paid
     const existingPayment = db.prepare('SELECT * FROM payments WHERE session_id = ?').get(session.id);
     if (existingPayment) {
-      return res.json(existingPayment);
+      return res.json({
+        ...existingPayment,
+        customer_name: session.customer_name,
+        terminal_number: session.terminal_number,
+        duration_minutes: session.actual_duration_minutes || session.expected_duration_minutes
+      });
     }
 
-    const rateRow = db.prepare('SELECT rate_per_unit FROM service_rates WHERE service_type = ?').get(session.terminal_type_name.toLowerCase());
+    const rateRow = db.prepare('SELECT rate_per_unit FROM service_rates WHERE service_type = ?').get((session.terminal_type_name || 'browsing').toLowerCase());
     const hourlyRate = rateRow ? rateRow.rate_per_unit : 20.0;
 
-    let durationMinutes = session.actual_duration_minutes || session.expected_duration_minutes;
-    let sessionCharge = session.session_charge;
+    let durationMinutes = session.actual_duration_minutes || session.expected_duration_minutes || 0;
+    let sessionCharge = session.session_charge || 0;
 
     if (session.status === 'active') {
       const now = new Date();
@@ -111,7 +114,6 @@ router.post('/finalize/:session_id', (req, res) => {
     const totalAmount = sessionCharge;
 
     const finalizeTx = db.transaction(() => {
-      // End session if still active
       if (session.status === 'active') {
         const now = new Date().toISOString();
         db.prepare(`
@@ -129,13 +131,11 @@ router.post('/finalize/:session_id', (req, res) => {
         db.prepare("UPDATE terminals SET status = 'available' WHERE id = ?").run(session.terminal_id);
       }
 
-      // Insert payment record
       const payRes = db.prepare(`
         INSERT INTO payments (session_id, customer_id, payment_type, session_charge, print_charge, total_amount, payment_method, status, receipt_number)
         VALUES (?, ?, 'session', ?, 0, ?, ?, 'paid', ?)
       `).run(session.id, session.customer_id, sessionCharge, totalAmount, selectedPaymentMethod, receiptNum);
 
-      // Update daily revenue for the terminal type
       const today = new Date().toISOString().slice(0, 10);
       let revRecord = db.prepare('SELECT * FROM daily_revenue WHERE date = ?').get(today);
       if (!revRecord) {
@@ -147,7 +147,7 @@ router.post('/finalize/:session_id', (req, res) => {
         gaming: 'gaming_revenue',
         academic: 'academic_revenue'
       };
-      const col = colMap[session.terminal_type_name.toLowerCase()] || 'browsing_revenue';
+      const col = colMap[(session.terminal_type_name || 'browsing').toLowerCase()] || 'browsing_revenue';
 
       db.prepare(`
         UPDATE daily_revenue 
@@ -164,11 +164,18 @@ router.post('/finalize/:session_id', (req, res) => {
     const payment = finalizeTx();
     return res.status(201).json({
       ...payment,
-      customer_name: session.customer_name,
-      duration_minutes: durationMinutes,
-      items: [
-        { description: `${session.terminal_type_name} Terminal Session (${durationMinutes} mins)`, amount: sessionCharge }
-      ]
+      receipt: {
+        receipt_number: receiptNum,
+        paid_at: payment.paid_at,
+        customer_name: session.customer_name,
+        customer_phone: session.customer_phone,
+        payment_method: selectedPaymentMethod,
+        total_amount: totalAmount,
+        session_charge: sessionCharge,
+        items: [
+          { description: `${session.terminal_type_name} PC Session (${durationMinutes} mins)`, amount: sessionCharge }
+        ]
+      }
     });
   } catch (err) {
     console.error('[billing/finalize]', err.message);

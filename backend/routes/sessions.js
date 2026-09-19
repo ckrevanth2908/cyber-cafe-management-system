@@ -18,14 +18,26 @@ router.get('/', (req, res) => {
       WHERE 1=1
     `;
     const params = [];
-    if (status && status !== 'all') { query += ' AND s.status = ?'; params.push(status); }
-    if (customer_id) { query += ' AND s.customer_id = ?'; params.push(customer_id); }
+
+    if (status && status !== 'all' && status !== 'history') {
+      query += ' AND s.status = ?';
+      params.push(status);
+    }
+    if (status === 'history') {
+      query += " AND s.status IN ('completed', 'terminated', 'expired')";
+    }
+    if (customer_id) {
+      query += ' AND s.customer_id = ?';
+      params.push(customer_id);
+    }
     if (search) {
       query += ' AND (c.name LIKE ? OR c.phone LIKE ? OR t.terminal_number LIKE ?)';
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
+
     query += ' ORDER BY s.id DESC';
-    return res.json(db.prepare(query).all(...params));
+    const sessions = db.prepare(query).all(...params);
+    return res.json(sessions);
   } catch (err) {
     console.error('[sessions GET]', err.message);
     return res.status(500).json({ detail: err.message });
@@ -49,7 +61,7 @@ router.get('/active', (req, res) => {
     `).all();
     return res.json(active);
   } catch (err) {
-    console.error('[sessions/active]', err.message);
+    console.error('[sessions/active GET]', err.message);
     return res.status(500).json({ detail: err.message });
   }
 });
@@ -85,7 +97,11 @@ router.get('/:id', (req, res) => {
       JOIN terminal_types tt ON t.type_id = tt.id
       WHERE s.id = ?
     `).get(req.params.id);
-    if (!session) return res.status(404).json({ detail: 'Session not found' });
+
+    if (!session) {
+      return res.status(404).json({ detail: 'Session not found' });
+    }
+
     const payment = db.prepare('SELECT * FROM payments WHERE session_id = ?').get(session.id);
     return res.json({ ...session, payment: payment || null });
   } catch (err) {
@@ -101,15 +117,17 @@ router.post('/:id/end', (req, res) => {
     if (!session || session.status !== 'active') {
       return res.status(400).json({ detail: 'Active session not found' });
     }
+
     const term = db.prepare(`
       SELECT t.*, tt.name as type_name 
       FROM terminals t 
       JOIN terminal_types tt ON t.type_id = tt.id 
       WHERE t.id = ?
     `).get(session.terminal_id);
-    const rateRow = db.prepare('SELECT rate_per_unit FROM service_rates WHERE service_type = ?')
-      .get((term.type_name || 'browsing').toLowerCase());
+
+    const rateRow = db.prepare('SELECT rate_per_unit FROM service_rates WHERE service_type = ?').get((term.type_name || 'browsing').toLowerCase());
     const hourlyRate = rateRow ? rateRow.rate_per_unit : 20.0;
+
     const now = new Date();
     const startTime = new Date(session.start_time);
     const actualMinutes = Math.max(1, Math.round((now.getTime() - startTime.getTime()) / 60000));
@@ -121,15 +139,17 @@ router.post('/:id/end', (req, res) => {
         SET actual_end_time = ?, actual_duration_minutes = ?, status = 'completed', session_charge = ?
         WHERE id = ?
       `).run(now.toISOString(), actualMinutes, charge, session.id);
+
       db.prepare(`
         UPDATE terminal_allocations 
         SET is_active = 0, released_at = ?
         WHERE session_id = ? AND is_active = 1
       `).run(now.toISOString(), session.id);
+
       db.prepare("UPDATE terminals SET status = 'available' WHERE id = ?").run(session.terminal_id);
     });
-    endTx();
 
+    endTx();
     const updated = db.prepare('SELECT * FROM sessions WHERE id = ?').get(session.id);
     return res.json(updated);
   } catch (err) {

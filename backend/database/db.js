@@ -1,11 +1,12 @@
 const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');
-const bcrypt = require('bcryptjs');
 
 const dbFilePath = path.resolve(process.env.DB_PATH || './database/cybercafe.db');
 const dbDir = path.dirname(dbFilePath);
-if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
 
 let rawDb = null;
 
@@ -16,11 +17,10 @@ function saveDbToDisk() {
     const buffer = Buffer.from(data);
     fs.writeFileSync(dbFilePath, buffer);
   } catch (err) {
-    console.error('Error persisting database to disk:', err);
+    console.error('[DB Persist Error]', err.message);
   }
 }
 
-// Wrapper to provide standard prepare().all(), prepare().get(), prepare().run()
 const db = {
   exec(sql) {
     if (!rawDb) throw new Error('Database not initialized');
@@ -78,7 +78,7 @@ const db = {
         saveDbToDisk();
         return result;
       } catch (err) {
-        try { rawDb.run('ROLLBACK'); } catch (e) { /* ignore rollback error */ }
+        try { rawDb.run('ROLLBACK'); } catch (e) {}
         throw err;
       }
     };
@@ -88,30 +88,25 @@ const db = {
 async function initDB() {
   const SQL = await initSqlJs();
   if (fs.existsSync(dbFilePath)) {
-    const fileBuffer = fs.readFileSync(dbFilePath);
-    rawDb = new SQL.Database(fileBuffer);
+    try {
+      const fileBuffer = fs.readFileSync(dbFilePath);
+      rawDb = new SQL.Database(fileBuffer);
+    } catch (e) {
+      console.warn('Could not read existing database file, creating fresh database.');
+      rawDb = new SQL.Database();
+    }
   } else {
     rawDb = new SQL.Database();
   }
 
-  // Create Tables
+  // Create clean schema
   db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT UNIQUE NOT NULL,
-      password TEXT NOT NULL,
-      full_name TEXT NOT NULL,
-      role TEXT DEFAULT 'staff',
-      is_active INTEGER DEFAULT 1,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
     CREATE TABLE IF NOT EXISTS system_config (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      cafe_name TEXT DEFAULT 'CyberNet Cafe',
-      address TEXT DEFAULT '123 Main Street',
-      phone TEXT DEFAULT '555-0100',
-      email TEXT DEFAULT 'admin@cybercafe.local',
+      cafe_name TEXT DEFAULT 'CyberCafe Pro',
+      address TEXT DEFAULT '100 Technology Boulevard, Suite 4',
+      phone TEXT DEFAULT '+91 98765 43210',
+      email TEXT DEFAULT 'contact@cybercafepro.in',
       age_restriction_gaming INTEGER DEFAULT 15,
       session_warning_minutes INTEGER DEFAULT 5,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -131,15 +126,6 @@ async function initDB() {
       status TEXT DEFAULT 'available',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (type_id) REFERENCES terminal_types(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS printers (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      printer_type TEXT NOT NULL,
-      specifications TEXT,
-      is_active INTEGER DEFAULT 1,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS service_rates (
@@ -190,16 +176,13 @@ async function initDB() {
       FOREIGN KEY (customer_id) REFERENCES customers(id)
     );
 
-    CREATE TABLE IF NOT EXISTS waiting_queue (
+    CREATE TABLE IF NOT EXISTS printers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      customer_id INTEGER NOT NULL,
-      terminal_type_id INTEGER NOT NULL,
-      expected_duration_minutes INTEGER NOT NULL,
-      added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      status TEXT DEFAULT 'waiting',
-      priority INTEGER DEFAULT 0,
-      FOREIGN KEY (customer_id) REFERENCES customers(id),
-      FOREIGN KEY (terminal_type_id) REFERENCES terminal_types(id)
+      name TEXT NOT NULL,
+      printer_type TEXT NOT NULL,
+      specifications TEXT,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS print_transactions (
@@ -250,60 +233,69 @@ async function initDB() {
     );
   `);
 
-  // Seed default admin user if not exists
-  const adminUser = db.prepare('SELECT id FROM users WHERE username = ?').get(process.env.ADMIN_USERNAME || 'admin');
-  if (!adminUser) {
-    const hash = bcrypt.hashSync(process.env.ADMIN_PASSWORD || 'admin123', 10);
-    db.prepare('INSERT INTO users (username, password, full_name, role) VALUES (?, ?, ?, ?)').run(
-      process.env.ADMIN_USERNAME || 'admin', hash, 'System Administrator', 'admin'
+  // Seed Terminal Types
+  const types = db.prepare('SELECT id FROM terminal_types').all();
+  if (types.length === 0) {
+    db.prepare('INSERT INTO terminal_types (name, description) VALUES (?, ?)').run('Browsing', 'High-speed internet & general workstation');
+    db.prepare('INSERT INTO terminal_types (name, description) VALUES (?, ?)').run('Gaming', 'RTX 4070 GPU & high-refresh 240Hz display');
+    db.prepare('INSERT INTO terminal_types (name, description) VALUES (?, ?)').run('Academic', 'Quiet zone for study, research & coding');
+  }
+
+  // Seed Default Terminals (6 PCs across 3 categories)
+  const existingTerms = db.prepare('SELECT id FROM terminals').all();
+  if (existingTerms.length === 0) {
+    db.prepare('INSERT INTO terminals (terminal_number, type_id, specifications, status) VALUES (?, ?, ?, ?)').run('B-01', 1, 'Core i5, 16GB RAM, 100Mbps Fiber', 'available');
+    db.prepare('INSERT INTO terminals (terminal_number, type_id, specifications, status) VALUES (?, ?, ?, ?)').run('B-02', 1, 'Core i5, 16GB RAM, 100Mbps Fiber', 'available');
+    db.prepare('INSERT INTO terminals (terminal_number, type_id, specifications, status) VALUES (?, ?, ?, ?)').run('G-01', 2, 'Ryzen 7 7800X3D, RTX 4070, 32GB RAM, 240Hz', 'available');
+    db.prepare('INSERT INTO terminals (terminal_number, type_id, specifications, status) VALUES (?, ?, ?, ?)').run('G-02', 2, 'Ryzen 7 7800X3D, RTX 4070, 32GB RAM, 240Hz', 'available');
+    db.prepare('INSERT INTO terminals (terminal_number, type_id, specifications, status) VALUES (?, ?, ?, ?)').run('A-01', 3, 'Core i5, 16GB RAM, Office Suite & IDEs', 'available');
+    db.prepare('INSERT INTO terminals (terminal_number, type_id, specifications, status) VALUES (?, ?, ?, ?)').run('A-02', 3, 'Core i5, 16GB RAM, Office Suite & IDEs', 'available');
+  }
+
+  // Seed Service Rates in INR
+  const rates = db.prepare('SELECT id FROM service_rates').all();
+  if (rates.length === 0) {
+    const insRate = db.prepare('INSERT INTO service_rates (service_type, rate_per_unit, unit, description) VALUES (?, ?, ?, ?)');
+    insRate.run('browsing', 20.0, 'hour', 'Standard browsing per hour');
+    insRate.run('gaming', 50.0, 'hour', 'Gaming terminal per hour');
+    insRate.run('academic', 15.0, 'hour', 'Academic zone per hour');
+    insRate.run('plain_print', 2.0, 'page', 'Black & white printing per page');
+    insRate.run('colour_print', 10.0, 'page', 'Colour printing per page');
+    insRate.run('xerox', 1.0, 'page', 'Photocopying per page');
+  }
+
+  // Seed Printers
+  const printers = db.prepare('SELECT id FROM printers').all();
+  if (printers.length === 0) {
+    db.prepare('INSERT INTO printers (name, printer_type, specifications) VALUES (?, ?, ?)').run('HP LaserJet Pro M404dn', 'plain', 'High-Speed B&W Laser, 40ppm');
+    db.prepare('INSERT INTO printers (name, printer_type, specifications) VALUES (?, ?, ?)').run('Epson EcoTank L3250', 'colour', 'Color Inkjet, High-Resolution');
+    db.prepare('INSERT INTO printers (name, printer_type, specifications) VALUES (?, ?, ?)').run('Canon imageRUNNER 2206', 'xerox', 'Commercial Digital Photocopier');
+  }
+
+  // Seed System Config
+  const cfg = db.prepare('SELECT id FROM system_config').get();
+  if (!cfg) {
+    db.prepare('INSERT INTO system_config (cafe_name) VALUES (?)').run('CyberCafe Pro');
+  }
+
+  // Seed Sample Customer if none exist
+  const custCount = db.prepare('SELECT COUNT(*) as count FROM customers').get().count;
+  if (custCount === 0) {
+    db.prepare('INSERT INTO customers (name, age, phone, email, address) VALUES (?, ?, ?, ?, ?)').run(
+      'Rahul Sharma', 22, '+91 98765 43210', 'rahul.sharma@example.com', 'Sector 14, Main Road'
     );
   }
 
-  // Seed terminal types
-  const types = db.prepare('SELECT id FROM terminal_types').all();
-  if (types.length === 0) {
-    db.prepare('INSERT INTO terminal_types (name, description) VALUES (?, ?)').run('Browsing', 'Standard internet browsing');
-    db.prepare('INSERT INTO terminal_types (name, description) VALUES (?, ?)').run('Gaming', 'High-performance gaming systems');
-    db.prepare('INSERT INTO terminal_types (name, description) VALUES (?, ?)').run('Academic', 'Quiet academic zone');
-  }
+  // Auto-heal any orphaned occupied terminals on boot
+  db.exec(`
+    UPDATE terminals 
+    SET status = 'available' 
+    WHERE id NOT IN (
+      SELECT terminal_id FROM sessions WHERE status = 'active'
+    ) AND status = 'occupied';
+  `);
 
-  // Seed default terminals if empty
-  const existingTerms = db.prepare('SELECT id FROM terminals').all();
-  if (existingTerms.length === 0) {
-    db.prepare('INSERT INTO terminals (terminal_number, type_id, specifications, status) VALUES (?, ?, ?, ?)').run('B-01', 1, 'Core i5, 16GB RAM, 100Mbps', 'available');
-    db.prepare('INSERT INTO terminals (terminal_number, type_id, specifications, status) VALUES (?, ?, ?, ?)').run('B-02', 1, 'Core i5, 16GB RAM, 100Mbps', 'available');
-    db.prepare('INSERT INTO terminals (terminal_number, type_id, specifications, status) VALUES (?, ?, ?, ?)').run('G-01', 2, 'RTX 4070, Ryzen 7, 32GB RAM, 240Hz', 'available');
-    db.prepare('INSERT INTO terminals (terminal_number, type_id, specifications, status) VALUES (?, ?, ?, ?)').run('G-02', 2, 'RTX 4070, Ryzen 7, 32GB RAM, 240Hz', 'available');
-    db.prepare('INSERT INTO terminals (terminal_number, type_id, specifications, status) VALUES (?, ?, ?, ?)').run('A-01', 3, 'Core i3, 8GB RAM, Office Suite', 'available');
-  }
-
-  // Seed service rates
-  const rates = db.prepare('SELECT id FROM service_rates').all();
-  if (rates.length === 0) {
-    const insertRate = db.prepare('INSERT INTO service_rates (service_type, rate_per_unit, unit, description) VALUES (?, ?, ?, ?)');
-    insertRate.run('browsing', 20.0, 'hour', 'Standard browsing per hour');
-    insertRate.run('gaming', 50.0, 'hour', 'Gaming terminal per hour');
-    insertRate.run('academic', 15.0, 'hour', 'Academic zone per hour');
-    insertRate.run('plain_print', 2.0, 'page', 'Black & white printing per page');
-    insertRate.run('colour_print', 10.0, 'page', 'Colour printing per page');
-    insertRate.run('xerox', 1.0, 'page', 'Photocopying per page');
-  }
-
-  // Seed system config
-  const config = db.prepare('SELECT id FROM system_config').get();
-  if (!config) {
-    db.prepare('INSERT INTO system_config (cafe_name) VALUES (?)').run('CyberNet Cafe');
-  }
-
-  // Seed sample printers
-  const printers = db.prepare('SELECT id FROM printers').all();
-  if (printers.length === 0) {
-    db.prepare('INSERT INTO printers (name, printer_type, specifications) VALUES (?, ?, ?)').run('HP LaserJet 1020', 'plain', 'B&W, 20ppm');
-    db.prepare('INSERT INTO printers (name, printer_type, specifications) VALUES (?, ?, ?)').run('Epson L3250', 'colour', 'Colour inkjet, 10ppm');
-    db.prepare('INSERT INTO printers (name, printer_type, specifications) VALUES (?, ?, ?)').run('Canon IR2204', 'xerox', 'Photocopier, 22ppm');
-  }
-
-  console.log('✅ SQLite Database initialized and seeded successfully');
+  console.log('✅ Cyber Cafe Database initialized successfully with all tables and seeds.');
 }
 
 module.exports = { db, initDB };

@@ -1,21 +1,24 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
 const cron = require('node-cron');
 const { initDB, db } = require('./database/db');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Universal CORS
 app.use(cors({
   origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());
 
-// Mount Routes with /api/v1, /api, and root fallbacks
+// Import Routes
 const authRouter = require('./routes/auth');
 const adminRouter = require('./routes/admin');
 const customersRouter = require('./routes/customers');
@@ -24,12 +27,11 @@ const ratesRouter = require('./routes/rates');
 const printersRouter = require('./routes/printers');
 const allocationsRouter = require('./routes/allocations');
 const sessionsRouter = require('./routes/sessions');
-const queueRouter = require('./routes/queue');
 const printingRouter = require('./routes/printing');
 const billingRouter = require('./routes/billing');
 const revenueRouter = require('./routes/revenue');
 
-// Canonical /api/v1 routes
+// Mount routes under canonical /api/v1/*
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/admin', adminRouter);
 app.use('/api/v1/customers', customersRouter);
@@ -38,12 +40,11 @@ app.use('/api/v1/rates', ratesRouter);
 app.use('/api/v1/printers', printersRouter);
 app.use('/api/v1/allocations', allocationsRouter);
 app.use('/api/v1/sessions', sessionsRouter);
-app.use('/api/v1/queue', queueRouter);
 app.use('/api/v1/printing', printingRouter);
 app.use('/api/v1/billing', billingRouter);
 app.use('/api/v1/revenue', revenueRouter);
 
-// Fallback /api routes
+// Fallback compatibility mounts /api/*
 app.use('/api/auth', authRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/customers', customersRouter);
@@ -52,46 +53,39 @@ app.use('/api/rates', ratesRouter);
 app.use('/api/printers', printersRouter);
 app.use('/api/allocations', allocationsRouter);
 app.use('/api/sessions', sessionsRouter);
-app.use('/api/queue', queueRouter);
 app.use('/api/printing', printingRouter);
 app.use('/api/billing', billingRouter);
 app.use('/api/revenue', revenueRouter);
 
-// Fallback direct root routes (e.g. /auth/login)
-app.use('/auth', authRouter);
-app.use('/admin', adminRouter);
-app.use('/customers', customersRouter);
-app.use('/terminals', terminalsRouter);
-app.use('/rates', ratesRouter);
-app.use('/printers', printersRouter);
-app.use('/allocations', allocationsRouter);
-app.use('/sessions', sessionsRouter);
-app.use('/printing', printingRouter);
-app.use('/billing', billingRouter);
-app.use('/revenue', revenueRouter);
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', time: new Date().toISOString() });
+});
 
-const path = require('path');
-const fs = require('fs');
-
-// Static Frontend Serving (in Production / on Render)
+// Static Frontend Serving (in Unified Production on Render)
 const frontendDistPath = path.resolve(__dirname, '../frontend/dist');
 if (fs.existsSync(frontendDistPath)) {
   app.use(express.static(frontendDistPath));
   app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api')) {
+    if (req.path.startsWith('/api') || req.path === '/health') {
       return next();
     }
     res.sendFile(path.join(frontendDistPath, 'index.html'));
   });
 } else {
   app.get('/', (req, res) => {
-    res.json({ message: 'Cyber Cafe Management API (Node.js)', version: '1.0.0', status: 'running' });
+    res.json({
+      name: 'CyberCafe Pro API',
+      status: 'online',
+      version: '2.0.0',
+      endpoints: '/api/v1'
+    });
   });
 }
 
-// Global error handler — catches any unhandled errors in routes
+// Global error handler
 app.use((err, req, res, next) => {
-  console.error('[Server Error]', err.message || err);
+  console.error('[Unhandled Server Error]', err.message || err);
   res.status(500).json({ detail: err.message || 'Internal server error' });
 });
 
@@ -101,87 +95,52 @@ async function startServer() {
   // Background Worker: Auto-Expire Sessions (Runs every 30 seconds)
   cron.schedule('*/30 * * * * *', () => {
     try {
-      const now = new Date();
+      const now = new Date().toISOString();
       const expiredSessions = db.prepare(`
         SELECT s.*, t.type_id, tt.name as type_name
         FROM sessions s
         JOIN terminals t ON s.terminal_id = t.id
         JOIN terminal_types tt ON t.type_id = tt.id
         WHERE s.status = 'active' AND s.expected_end_time <= ?
-      `).all(now.toISOString());
+      `).all(now);
 
-      for (const sess of expiredSessions) {
-        const rateRow = db.prepare('SELECT rate_per_unit FROM service_rates WHERE service_type = ?').get(sess.type_name.toLowerCase());
-        const hourlyRate = rateRow ? rateRow.rate_per_unit : 20.0;
-        const charge = Number(((sess.expected_duration_minutes / 60) * hourlyRate).toFixed(2));
+      if (expiredSessions.length > 0) {
+        console.log(`[Scheduler] Auto-expiring ${expiredSessions.length} sessions...`);
+        for (const sess of expiredSessions) {
+          const rateRow = db.prepare('SELECT rate_per_unit FROM service_rates WHERE service_type = ?').get((sess.type_name || 'browsing').toLowerCase());
+          const hourlyRate = rateRow ? rateRow.rate_per_unit : 20.0;
+          const charge = Number(((sess.expected_duration_minutes / 60) * hourlyRate).toFixed(2));
 
-        db.transaction(() => {
-          // Mark session completed/expired
-          db.prepare(`
-            UPDATE sessions 
-            SET actual_end_time = ?, actual_duration_minutes = expected_duration_minutes, status = 'completed', session_charge = ?
-            WHERE id = ?
-          `).run(now.toISOString(), charge, sess.id);
-
-          // Release allocation
-          db.prepare(`
-            UPDATE terminal_allocations 
-            SET is_active = 0, released_at = ?
-            WHERE session_id = ? AND is_active = 1
-          `).run(now.toISOString(), sess.id);
-
-          // Make terminal available
-          db.prepare("UPDATE terminals SET status = 'available' WHERE id = ?").run(sess.terminal_id);
-        })();
-
-        console.log(`[Auto-Expire] Session #${sess.id} expired. Terminal #${sess.terminal_id} released.`);
-      }
-
-      // Auto-Process Waiting Queue for any newly freed terminals
-      const waitingItems = db.prepare(`
-        SELECT q.*, c.name as customer_name, tt.name as type_name
-        FROM waiting_queue q
-        JOIN customers c ON q.customer_id = c.id
-        JOIN terminal_types tt ON q.terminal_type_id = tt.id
-        WHERE q.status = 'waiting'
-        ORDER BY q.priority DESC, q.id ASC
-      `).all();
-
-      for (const item of waitingItems) {
-        const availableTerm = db.prepare('SELECT * FROM terminals WHERE type_id = ? AND status = ? ORDER BY id ASC LIMIT 1')
-          .get(item.terminal_type_id, 'available');
-
-        if (availableTerm) {
-          const startTime = new Date();
-          const endTime = new Date(startTime.getTime() + item.expected_duration_minutes * 60000);
-
-          db.transaction(() => {
-            const sessRes = db.prepare(`
-              INSERT INTO sessions (customer_id, terminal_id, start_time, expected_end_time, expected_duration_minutes, status, session_charge)
-              VALUES (?, ?, ?, ?, ?, 'active', 0)
-            `).run(item.customer_id, availableTerm.id, startTime.toISOString(), endTime.toISOString(), item.expected_duration_minutes);
-
-            db.prepare("UPDATE terminals SET status = 'occupied' WHERE id = ?").run(availableTerm.id);
+          const expireTx = db.transaction(() => {
+            db.prepare(`
+              UPDATE sessions 
+              SET actual_end_time = expected_end_time, actual_duration_minutes = expected_duration_minutes, status = 'completed', session_charge = ?
+              WHERE id = ?
+            `).run(charge, sess.id);
 
             db.prepare(`
-              INSERT INTO terminal_allocations (terminal_id, session_id, customer_id, allocated_at, is_active)
-              VALUES (?, ?, ?, ?, 1)
-            `).run(availableTerm.id, sessRes.lastInsertRowid, item.customer_id, startTime.toISOString());
+              UPDATE terminal_allocations 
+              SET is_active = 0, released_at = ?
+              WHERE session_id = ? AND is_active = 1
+            `).run(now, sess.id);
 
-            db.prepare("UPDATE waiting_queue SET status = 'allocated' WHERE id = ?").run(item.id);
-          })();
+            db.prepare("UPDATE terminals SET status = 'available' WHERE id = ?").run(sess.terminal_id);
+          });
 
-          console.log(`[Queue Processor] Allocated Terminal #${availableTerm.terminal_number} to Customer ${item.customer_name}`);
+          expireTx();
         }
       }
     } catch (err) {
-      console.error('Scheduler error:', err);
+      console.error('[Scheduler Error]', err.message);
     }
   });
 
   app.listen(PORT, () => {
-    console.log(`🚀 Cyber Cafe Backend running on http://localhost:${PORT}`);
+    console.log(`🚀 CyberCafe Pro Backend listening on port ${PORT}`);
   });
 }
 
-startServer();
+startServer().catch(err => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
+});

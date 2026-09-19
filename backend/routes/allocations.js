@@ -19,14 +19,12 @@ router.post('/', (req, res) => {
       return res.status(400).json({ detail: 'Please select a customer first' });
     }
 
-    // Ensure Customer exists, or create a default one if needed
+    // Ensure customer exists or fallback to first
     let customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(customerId);
     if (!customer) {
-      const defaultCust = db.prepare('SELECT * FROM customers LIMIT 1').get();
-      if (defaultCust) {
-        customer = defaultCust;
-      } else {
-        const newCust = db.prepare('INSERT INTO customers (name, age, phone) VALUES (?, ?, ?)').run('Walk-in Customer', 21, '9999999999');
+      customer = db.prepare('SELECT * FROM customers LIMIT 1').get();
+      if (!customer) {
+        const newCust = db.prepare('INSERT INTO customers (name, age, phone) VALUES (?, ?, ?)').run('Walk-in Customer', 21, '+91 99999 99999');
         customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(newCust.lastInsertRowid);
       }
     }
@@ -42,23 +40,22 @@ router.post('/', (req, res) => {
     if (!termType) {
       termType = db.prepare('SELECT * FROM terminal_types WHERE LOWER(name) = ?').get('browsing');
       if (!termType) {
-        const ins = db.prepare('INSERT INTO terminal_types (name, description) VALUES (?, ?)').run('Browsing', 'Standard internet');
+        const ins = db.prepare('INSERT INTO terminal_types (name, description) VALUES (?, ?)').run('Browsing', 'Standard Workstation');
         termType = { id: ins.lastInsertRowid, name: 'Browsing' };
       }
     }
     terminalTypeId = termType.id;
 
-    // Find an available terminal for this type
+    // Find available terminal
     let term = null;
     if (terminalId) {
       term = db.prepare('SELECT * FROM terminals WHERE id = ? AND status = ?').get(terminalId, 'available');
     }
-
     if (!term) {
       term = db.prepare('SELECT * FROM terminals WHERE type_id = ? AND status = ? ORDER BY id ASC LIMIT 1').get(terminalTypeId, 'available');
     }
 
-    // If no available terminal exists for this type, create one automatically or free an available one
+    // If all occupied, auto-create a terminal or force available
     if (!term) {
       const prefix = termType.name.charAt(0).toUpperCase();
       const count = db.prepare('SELECT COUNT(*) as cnt FROM terminals WHERE type_id = ?').get(terminalTypeId).cnt;
@@ -69,7 +66,7 @@ router.post('/', (req, res) => {
         const insTerm = db.prepare('INSERT INTO terminals (terminal_number, type_id, specifications, status) VALUES (?, ?, ?, ?)').run(
           newTermNumber,
           terminalTypeId,
-          `${termType.name} High-Performance PC`,
+          `${termType.name} Workstation`,
           'available'
         );
         term = db.prepare('SELECT * FROM terminals WHERE id = ?').get(insTerm.lastInsertRowid);
@@ -79,14 +76,14 @@ router.post('/', (req, res) => {
       }
     }
 
-    // Get hourly rate
+    // Rate lookup
     const rateRow = db.prepare('SELECT rate_per_unit FROM service_rates WHERE service_type = ?').get(termType.name.toLowerCase());
     const hourlyRate = rateRow ? rateRow.rate_per_unit : 20.0;
 
     const startTime = new Date();
     const expectedEndTime = new Date(startTime.getTime() + durationMinutes * 60000);
 
-    // Atomic Allocation Transaction
+    // Atomic session creation and terminal allocation
     const allocateTx = db.transaction(() => {
       const sessionRes = db.prepare(`
         INSERT INTO sessions (customer_id, terminal_id, start_time, expected_end_time, expected_duration_minutes, status, session_charge)
@@ -101,8 +98,6 @@ router.post('/', (req, res) => {
         INSERT INTO terminal_allocations (terminal_id, session_id, customer_id, allocated_at, is_active)
         VALUES (?, ?, ?, ?, 1)
       `).run(term.id, sessionId, customer.id, startTime.toISOString());
-
-      db.prepare("UPDATE waiting_queue SET status = 'allocated' WHERE customer_id = ? AND terminal_type_id = ? AND status = 'waiting'").run(customer.id, terminalTypeId);
 
       return {
         id: allocRes.lastInsertRowid,
@@ -123,7 +118,7 @@ router.post('/', (req, res) => {
     const allocation = allocateTx();
     return res.status(201).json(allocation);
   } catch (err) {
-    console.error('Allocation error:', err);
+    console.error('[allocations POST]', err.message);
     return res.status(500).json({ detail: 'Failed to allocate terminal: ' + err.message });
   }
 });
@@ -160,7 +155,7 @@ router.post('/:id/release', (req, res) => {
     const now = new Date();
     const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(alloc.session_id);
     const term = db.prepare('SELECT t.*, tt.name as type_name FROM terminals t JOIN terminal_types tt ON t.type_id = tt.id WHERE t.id = ?').get(alloc.terminal_id);
-    const rateRow = db.prepare('SELECT rate_per_unit FROM service_rates WHERE service_type = ?').get(term.type_name.toLowerCase());
+    const rateRow = db.prepare('SELECT rate_per_unit FROM service_rates WHERE service_type = ?').get((term.type_name || 'browsing').toLowerCase());
     const hourlyRate = rateRow ? rateRow.rate_per_unit : 20.0;
 
     const startTime = new Date(session.start_time);
@@ -184,7 +179,7 @@ router.post('/:id/release', (req, res) => {
     });
 
     releaseTx();
-    return res.json({ detail: 'Terminal released and session ended successfully', session_id: session.id, charge });
+    return res.json({ detail: 'Terminal released successfully', session_id: session.id, charge });
   } catch (err) {
     console.error('[allocations/:id/release]', err.message);
     return res.status(500).json({ detail: err.message });

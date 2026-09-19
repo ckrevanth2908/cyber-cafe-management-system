@@ -56,7 +56,7 @@ const ReceiptModal = ({ isOpen, onClose, receiptData }) => {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Date & Time:</span>
-              <span>{format(new Date(), 'dd MMM yyyy, hh:mm a')}</span>
+              <span>{format(receiptData.paid_at ? new Date(receiptData.paid_at) : new Date(), 'dd MMM yyyy, hh:mm a')}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Customer:</span>

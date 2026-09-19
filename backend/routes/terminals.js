@@ -26,11 +26,10 @@ router.get('/', (req, res) => {
     query += ' ORDER BY t.terminal_number ASC';
     const terminals = db.prepare(query).all(...params);
 
-    // Attach active session if occupied, and auto-heal orphaned occupied terminals
     const result = terminals.map(term => {
       if (term.status === 'occupied') {
         const activeSession = db.prepare(`
-          SELECT s.*, c.name as customer_name
+          SELECT s.*, c.name as customer_name, c.phone as customer_phone
           FROM sessions s
           JOIN customers c ON s.customer_id = c.id
           WHERE s.terminal_id = ? AND s.status = 'active'
@@ -38,7 +37,6 @@ router.get('/', (req, res) => {
         `).get(term.id);
 
         if (!activeSession) {
-          // Self-heal: No active session exists, mark available in DB!
           db.prepare("UPDATE terminals SET status = 'available' WHERE id = ?").run(term.id);
           return { ...term, status: 'available', current_session: null };
         }
@@ -151,11 +149,11 @@ router.put('/:id', (req, res) => {
   }
 });
 
-// PUT /api/v1/terminals/:id/status
-router.put('/:id/status', updateTerminalStatus);
-router.patch('/:id/status', updateTerminalStatus);
+// PATCH /api/v1/terminals/:id/status
+router.patch('/:id/status', updateStatusHandler);
+router.put('/:id/status', updateStatusHandler);
 
-function updateTerminalStatus(req, res) {
+function updateStatusHandler(req, res) {
   try {
     const { status } = req.body;
     if (!['available', 'occupied', 'maintenance'].includes(status)) {
@@ -167,10 +165,6 @@ function updateTerminalStatus(req, res) {
       return res.status(404).json({ detail: 'Terminal not found' });
     }
 
-    if (existing.status === 'occupied' && status === 'maintenance') {
-      return res.status(400).json({ detail: 'Cannot put occupied terminal into maintenance' });
-    }
-
     db.prepare('UPDATE terminals SET status = ? WHERE id = ?').run(status, req.params.id);
     const updated = db.prepare('SELECT * FROM terminals WHERE id = ?').get(req.params.id);
     return res.json(updated);
@@ -180,15 +174,20 @@ function updateTerminalStatus(req, res) {
   }
 }
 
-// POST /api/v1/terminals/:id/free
-// POST /api/v1/terminals/:id/release
-router.post('/:id/free', freeTerminalHandler);
-router.post('/:id/release', freeTerminalHandler);
+// POST /api/v1/terminals/:id/free (Free seat / release terminal)
+router.post('/:id/free', freeSeatHandler);
+router.post('/:id/release', freeSeatHandler);
 
-function freeTerminalHandler(req, res) {
+function freeSeatHandler(req, res) {
   try {
     const terminalId = req.params.id;
-    const term = db.prepare('SELECT t.*, tt.name as type_name FROM terminals t JOIN terminal_types tt ON t.type_id = tt.id WHERE t.id = ?').get(terminalId);
+    const term = db.prepare(`
+      SELECT t.*, tt.name as type_name 
+      FROM terminals t 
+      JOIN terminal_types tt ON t.type_id = tt.id 
+      WHERE t.id = ?
+    `).get(terminalId);
+
     if (!term) {
       return res.status(404).json({ detail: 'Terminal not found' });
     }
@@ -198,7 +197,7 @@ function freeTerminalHandler(req, res) {
 
     const freeTx = db.transaction(() => {
       if (activeSession) {
-        const rateRow = db.prepare('SELECT rate_per_unit FROM service_rates WHERE service_type = ?').get(term.type_name.toLowerCase());
+        const rateRow = db.prepare('SELECT rate_per_unit FROM service_rates WHERE service_type = ?').get((term.type_name || 'browsing').toLowerCase());
         const hourlyRate = rateRow ? rateRow.rate_per_unit : 20.0;
         const startTime = new Date(activeSession.start_time);
         const actualMinutes = Math.max(1, Math.round((now.getTime() - startTime.getTime()) / 60000));
@@ -222,7 +221,11 @@ function freeTerminalHandler(req, res) {
 
     freeTx();
     const updated = db.prepare('SELECT * FROM terminals WHERE id = ?').get(terminalId);
-    return res.json({ message: 'Terminal freed and seat occupancy revoked successfully', terminal: updated, session_ended: activeSession?.id || null });
+    return res.json({ 
+      message: 'Terminal freed and seat occupancy revoked successfully', 
+      terminal: updated, 
+      session_ended: activeSession?.id || null 
+    });
   } catch (err) {
     console.error('[terminals/:id/free]', err.message);
     return res.status(500).json({ detail: err.message });

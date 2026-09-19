@@ -7,7 +7,7 @@ router.get('/config', (req, res) => {
   try {
     let config = db.prepare('SELECT * FROM system_config LIMIT 1').get();
     if (!config) {
-      db.prepare('INSERT INTO system_config (cafe_name) VALUES (?)').run('CyberNet Cafe');
+      db.prepare('INSERT INTO system_config (cafe_name) VALUES (?)').run('CyberCafe Pro');
       config = db.prepare('SELECT * FROM system_config LIMIT 1').get();
     }
     return res.json(config);
@@ -38,7 +38,7 @@ router.put('/config', (req, res) => {
       db.prepare(`
         INSERT INTO system_config (cafe_name, address, phone, email, age_restriction_gaming, session_warning_minutes)
         VALUES (?, ?, ?, ?, ?, ?)
-      `).run(cafe_name || 'CyberNet Cafe', address, phone, email, age_restriction_gaming || 15, session_warning_minutes || 5);
+      `).run(cafe_name || 'CyberCafe Pro', address, phone, email, age_restriction_gaming || 15, session_warning_minutes || 5);
     }
     const updated = db.prepare('SELECT * FROM system_config LIMIT 1').get();
     return res.json(updated);
@@ -56,9 +56,11 @@ router.get('/stats', (req, res) => {
     const totalTerminals = db.prepare("SELECT COUNT(*) as count FROM terminals").get().count;
     const totalCustomers = db.prepare("SELECT COUNT(*) as count FROM customers").get().count;
     const completedToday = db.prepare("SELECT COUNT(*) as count FROM sessions WHERE status = 'completed' AND DATE(start_time) = DATE('now')").get().count;
+    
     const today = new Date().toISOString().slice(0, 10);
     const revenueRecord = db.prepare('SELECT total_revenue FROM daily_revenue WHERE date = ?').get(today);
     const todayRevenue = revenueRecord ? revenueRecord.total_revenue : 0;
+
     return res.json({
       active_sessions: activeSessions,
       available_terminals: availableTerminals,

@@ -142,7 +142,7 @@ const Dashboard = () => {
         <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 text-sm text-red-700">
           <div className="flex items-center space-x-2">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            <span>Could not reach the server. Showing cached data — some values may be stale.</span>
+            <span>Connecting to backend... If this is the first visit, Render free tier takes ~30 seconds to wake up.</span>
           </div>
           <button onClick={() => refetch()} className="ml-4 text-xs font-bold underline">
             Retry
