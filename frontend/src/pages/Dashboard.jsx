@@ -112,13 +112,14 @@ const Dashboard = () => {
       cell: (r) => (
         <button
           onClick={() =>
-            window.confirm(`Free Terminal ${r.terminal_number} for ${r.customer_name}?`) &&
+            window.confirm(`Checkout customer ${r.customer_name} from Terminal ${r.terminal_number}? Seat will become available.`) &&
             endSessionMutation.mutate(r.id)
           }
           disabled={endSessionMutation.isPending}
-          className="flex items-center text-xs font-bold text-red-700 bg-red-100 hover:bg-red-200 border border-red-300 px-2.5 py-1 rounded-md transition-colors disabled:opacity-50"
+          className="flex items-center text-xs font-black text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg shadow-sm transition-all active:scale-95 disabled:opacity-50"
         >
-          <StopCircle className="w-3.5 h-3.5 mr-1" /> Free Seat
+          <StopCircle className="w-3.5 h-3.5 mr-1 flex-shrink-0" />
+          <span>Customer Exit (Free Seat)</span>
         </button>
       ),
     },
@@ -189,7 +190,7 @@ const Dashboard = () => {
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                 {terminals.map((terminal) => {
-                  const session = activeSessions.find((s) => s.terminal_id === terminal.id);
+                  const session = activeSessions.find((s) => Number(s.terminal_id) === Number(terminal.id)) || terminal.current_session;
                   return <TerminalCard key={terminal.id} terminal={terminal} session={session} />;
                 })}
               </div>

@@ -120,15 +120,15 @@ const Terminals = () => {
           return (
             <button
               onClick={() => {
-                if (window.confirm(`Release ${row.terminal_number} and revoke occupied status?`)) {
+                if (window.confirm(`Checkout customer from ${row.terminal_number}? Seat will become available.`)) {
                   freeTerminalMutation.mutate(row.id);
                 }
               }}
               disabled={freeTerminalMutation.isPending}
-              className="text-xs font-bold px-3 py-1 rounded bg-red-600 hover:bg-red-700 text-white shadow-sm transition-colors"
-              title="Click when customer leaves to free this seat"
+              className="text-xs font-black px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white shadow-sm transition-all active:scale-95"
+              title="Click when customer exits to free this seat"
             >
-              Customer Left (Free Seat)
+              Customer Exit (Free Seat)
             </button>
           );
         }

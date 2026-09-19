@@ -49,6 +49,12 @@ const Allocate = () => {
   const allocateMutation = useMutation({
     mutationFn: allocationsApi.allocate,
     onSuccess: (data) => {
+      if (data && data.terminal_id) {
+        queryClient.setQueryData(['terminals'], (old = []) =>
+          old.map(t => t.id === data.terminal_id ? { ...t, status: 'occupied', current_session: data } : t)
+        );
+        queryClient.setQueryData(['activeSessions'], (old = []) => [data, ...old]);
+      }
       queryClient.invalidateQueries({ queryKey: ['terminals'] });
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
       queryClient.invalidateQueries({ queryKey: ['activeSessions'] });

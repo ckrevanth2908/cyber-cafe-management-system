@@ -167,25 +167,52 @@ const Sessions = () => {
       cell: (row) => <StatusBadge status={row.status} />
     },
     { 
+      header: 'Billing Status', 
+      cell: (row) => {
+        if (row.payment_status === 'paid' || row.receipt_number) {
+          return (
+            <span className="inline-flex items-center text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded">
+              <CheckCircle className="w-3 h-3 mr-1 flex-shrink-0" /> Paid ({row.receipt_number || 'Cash'})
+            </span>
+          );
+        }
+        if (row.status === 'active') {
+          return (
+            <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded">
+              ⚡ Running
+            </span>
+          );
+        }
+        return (
+          <button
+            onClick={() => navigate(`/billing?sessionId=${row.id}`)}
+            className="text-xs font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded underline cursor-pointer"
+          >
+            🟡 Unbilled (Pay Now)
+          </button>
+        );
+      }
+    },
+    { 
       header: 'Actions',
       cell: (row) => (
         <div className="flex items-center space-x-2">
           {row.status === 'active' ? (
             <button
               onClick={() => setSessionToCancel(row)}
-              className="text-white bg-red-600 hover:bg-red-700 font-bold text-xs flex items-center px-3 py-1.5 rounded-lg shadow-sm transition-all active:scale-95"
+              className="text-white bg-red-600 hover:bg-red-700 font-bold text-xs flex items-center px-3 py-1.5 rounded-lg shadow-sm transition-all active:scale-95 whitespace-nowrap"
               title="Click when customer leaves to free this seat"
             >
-              <StopCircle className="w-3.5 h-3.5 mr-1" />
-              Customer Left (Free Seat)
+              <StopCircle className="w-3.5 h-3.5 mr-1 flex-shrink-0" />
+              Customer Exit (Free Seat)
             </button>
           ) : (
             <button
-              onClick={() => navigate('/billing')}
-              className="text-primary hover:text-primary-dark font-bold text-xs flex items-center bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-md border border-blue-200 transition-colors"
+              onClick={() => navigate(`/billing?sessionId=${row.id}`)}
+              className="text-primary hover:text-primary-dark font-bold text-xs flex items-center bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-md border border-blue-200 transition-colors whitespace-nowrap"
             >
-              <Receipt className="w-3.5 h-3.5 mr-1" />
-              Invoice
+              <Receipt className="w-3.5 h-3.5 mr-1 flex-shrink-0" />
+              Bill & Receipt
             </button>
           )}
         </div>
@@ -318,8 +345,8 @@ const Sessions = () => {
                   disabled={endSessionMutation.isPending}
                   className="w-full py-2 px-3 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-black shadow transition-all active:scale-95 flex items-center justify-center space-x-1.5"
                 >
-                  <StopCircle className="w-4 h-4" />
-                  <span>Customer Left (Free Seat)</span>
+                  <StopCircle className="w-4 h-4 mr-1 flex-shrink-0" />
+                  <span>Customer Exit (Free Seat)</span>
                 </button>
               </div>
             ))}

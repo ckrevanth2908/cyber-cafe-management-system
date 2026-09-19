@@ -9,25 +9,25 @@ const TerminalCard = ({ terminal, session, onClick, onFree }) => {
   const queryClient = useQueryClient();
   if (!terminal) return null;
 
+  const currentSession = session || terminal.current_session;
   const statusStr = (terminal.status || 'available').toLowerCase();
   const isOccupied = statusStr === 'occupied';
   const isMaintenance = statusStr === 'maintenance';
 
   const terminalNumber = terminal.terminal_number || terminal.number || 'PC';
   const terminalType = terminal.type_name || terminal.type || 'Standard';
-  const customerName = session?.customer_name || session?.customerName || terminal.current_session?.customer_name || 'Occupied';
-  const endTime = session?.expected_end_time || session?.expectedEnd || terminal.current_session?.expected_end_time;
+  const customerName = currentSession?.customer_name || currentSession?.customerName || 'Occupied';
+  const customerPhone = currentSession?.customer_phone || currentSession?.phone || '';
+  const endTime = currentSession?.expected_end_time || currentSession?.expectedEnd;
 
   const freeSeatMutation = useMutation({
     mutationFn: () => terminalsApi.freeTerminal(terminal.id),
     onMutate: async () => {
-      // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['terminals'] });
-      // Optimistically update terminals cache to immediately turn green
-      queryClient.setQueryData(['terminals'], (old) => {
-        if (!old) return old;
-        return old.map(t => t.id === terminal.id ? { ...t, status: 'available', current_session: null } : t);
-      });
+      // Optimistically update terminals cache immediately to green
+      queryClient.setQueryData(['terminals'], (old = []) =>
+        old.map(t => t.id === terminal.id ? { ...t, status: 'available', current_session: null } : t)
+      );
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['terminals'] });
@@ -43,7 +43,9 @@ const TerminalCard = ({ terminal, session, onClick, onFree }) => {
 
   const handleFreeSeat = (e) => {
     if (e && e.stopPropagation) e.stopPropagation();
-    freeSeatMutation.mutate();
+    if (window.confirm(`Free Terminal ${terminalNumber}? Customer will be checked out and seat will become available.`)) {
+      freeSeatMutation.mutate();
+    }
   };
 
   const handleCardClick = (e) => {
@@ -58,14 +60,15 @@ const TerminalCard = ({ terminal, session, onClick, onFree }) => {
     <div 
       onClick={handleCardClick}
       title={isOccupied ? "Click to turn status to Available" : undefined}
-      className={`relative p-4 rounded-xl border-2 transition-all duration-300 cursor-pointer select-none active:scale-[0.99] ${
+      className={`relative p-4 rounded-xl border-2 transition-all duration-200 select-none ${
         isOccupied 
-          ? 'border-red-500 bg-red-50/90 shadow-md ring-2 ring-red-400/40 hover:bg-red-100/90' 
+          ? 'border-red-500 bg-red-50/90 shadow-md ring-2 ring-red-400/40' 
           : isMaintenance
             ? 'border-amber-300 bg-amber-50 hover:border-amber-400'
-            : 'border-green-400 bg-green-50/60 hover:border-green-600 hover:bg-green-100/60 hover:shadow-md'
+            : 'border-green-400 bg-green-50/70 hover:border-green-600 hover:bg-green-100/60 shadow-sm'
       }`}
     >
+      {/* Top Header */}
       <div className="flex justify-between items-start mb-2">
         <div className="flex items-center space-x-2">
           <Monitor className={`w-5 h-5 ${isOccupied ? 'text-red-600' : isMaintenance ? 'text-amber-600' : 'text-green-600'}`} />
@@ -73,45 +76,61 @@ const TerminalCard = ({ terminal, session, onClick, onFree }) => {
             {terminalNumber}
           </h3>
         </div>
-        <StatusBadge 
-          status={terminal.status} 
-          onClick={(e) => {
-            e.stopPropagation();
-            if (isOccupied) {
-              freeSeatMutation.mutate();
-            } else if (onClick) {
-              onClick(e);
-            }
-          }}
-          title={isOccupied ? "Click to turn to Available" : "Status"}
-        />
+        <span className={`px-2 py-0.5 rounded text-[11px] font-black uppercase tracking-wider ${
+          isOccupied 
+            ? 'bg-red-600 text-white shadow-sm animate-pulse' 
+            : isMaintenance
+              ? 'bg-amber-200 text-amber-900'
+              : 'bg-green-600 text-white shadow-sm'
+        }`}>
+          {isOccupied ? '🔴 FILLED' : isMaintenance ? '🟡 MAINT' : '🟢 VACANT'}
+        </span>
       </div>
 
       <div className="text-xs text-gray-600 mb-2">
-        <p className="capitalize">Type: <span className="font-bold text-gray-800">{terminalType}</span></p>
+        <p className="capitalize font-medium">Type: <span className="font-bold text-gray-800">{terminalType}</span></p>
       </div>
 
+      {/* When Vacant / Available */}
+      {!isOccupied && !isMaintenance && (
+        <div className="mt-3 pt-2.5 border-t border-green-200/60 flex items-center justify-between text-xs text-green-800 font-semibold">
+          <span>Ready for Customer</span>
+          <CheckCircle className="w-3.5 h-3.5 text-green-600" />
+        </div>
+      )}
+
+      {/* When Filled / Occupied */}
       {isOccupied && (
-        <div className="mt-3 pt-3 border-t border-red-200 bg-red-100/70 -mx-4 -mb-4 p-3 rounded-b-lg space-y-2">
-          <div className="flex items-center text-xs font-bold text-red-900 truncate">
-            <User className="w-3.5 h-3.5 mr-1.5 text-red-600 flex-shrink-0" />
-            <span className="truncate">{customerName}</span>
+        <div className="mt-3 pt-3 border-t border-red-200 bg-red-100/80 -mx-4 -mb-4 p-3 rounded-b-lg space-y-2">
+          <div>
+            <div className="flex items-center text-xs font-bold text-red-900 truncate">
+              <User className="w-3.5 h-3.5 mr-1.5 text-red-600 flex-shrink-0" />
+              <span className="truncate">{customerName}</span>
+            </div>
+            {customerPhone && (
+              <p className="text-[11px] text-red-700 ml-5 truncate">{customerPhone}</p>
+            )}
           </div>
+
           {endTime && (
-            <div className="flex items-center text-xs text-red-800 font-semibold">
-              <Clock className="w-3.5 h-3.5 mr-1.5 text-red-600 flex-shrink-0" />
+            <div className="flex items-center justify-between text-xs text-red-800 font-semibold bg-white/70 px-2 py-1 rounded border border-red-200">
+              <div className="flex items-center">
+                <Clock className="w-3.5 h-3.5 mr-1 text-red-600" />
+                <span>Time Left:</span>
+              </div>
               <SessionTimer endTime={endTime} />
             </div>
           )}
+
           <button
             type="button"
             onClick={handleFreeSeat}
             disabled={freeSeatMutation.isPending}
-            className="w-full mt-2 flex items-center justify-center py-1.5 px-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-black shadow transition-colors active:scale-95 disabled:opacity-50"
-            title="Click when customer leaves to free this seat immediately"
+            className="w-full mt-2 flex items-center justify-center py-2 px-3 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-black shadow-sm transition-all active:scale-95 disabled:opacity-50 space-x-1.5"
+            title="Click when customer exits to make this seat available"
           >
-            <LogOut className="w-3.5 h-3.5 mr-1.5" />
-            {freeSeatMutation.isPending ? 'Freeing...' : 'Customer Left (Free Seat)'}
+            <LogOut className="w-3.5 h-3.5 flex-shrink-0" />
+            <span>{freeSeatMutation.isPending ? 'Freeing Seat...' : 'Customer Exit (Make Available)'}</span>
           </button>
         </div>
       )}
