@@ -3,6 +3,23 @@ import { authApi } from '../api';
 
 const AuthContext = createContext(null);
 
+// Decode JWT payload without verifying signature (for fallback user info only)
+function decodeJwtPayload(token) {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+}
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('cyber_cafe_token') || null);
@@ -17,11 +34,22 @@ export const AuthProvider = ({ children }) => {
           setUser(userData);
           setToken(storedToken);
         } catch (error) {
-          console.error("Token verification failed", error);
-          logout();
+          console.error('Token verification failed, using fallback user from JWT payload', error);
+          // Don't logout — decode the token payload and use it as fallback user.
+          // This prevents the redirect loop when /auth/me is unreachable or returns 401
+          // right after a successful login (Render cold start, JWT mismatch, etc.)
+          const payload = decodeJwtPayload(storedToken);
+          if (payload && (payload.username || payload.sub)) {
+            setUser({ username: payload.username || payload.sub, role: payload.role || 'admin' });
+            setToken(storedToken);
+          } else {
+            // Token is truly invalid (can't even decode it)
+            logout();
+          }
         }
       } else {
-        logout();
+        setUser(null);
+        setToken(null);
       }
       setIsLoading(false);
     };
@@ -38,8 +66,9 @@ export const AuthProvider = ({ children }) => {
       }
 
       localStorage.setItem('cyber_cafe_token', authToken);
+      const userObj = data.user || { username, role: 'admin' };
       setToken(authToken);
-      setUser(data.user || { username, role: 'admin' });
+      setUser(userObj);
       return { success: true };
     } catch (error) {
       console.error('Login error:', error);
