@@ -15,19 +15,60 @@ app.use(cors({
 
 app.use(express.json());
 
-// Routes
-app.use('/api/v1/auth', require('./routes/auth'));
-app.use('/api/v1/admin', require('./routes/admin'));
-app.use('/api/v1/customers', require('./routes/customers'));
-app.use('/api/v1/terminals', require('./routes/terminals'));
-app.use('/api/v1/rates', require('./routes/rates'));
-app.use('/api/v1/printers', require('./routes/printers'));
-app.use('/api/v1/allocations', require('./routes/allocations'));
-app.use('/api/v1/sessions', require('./routes/sessions'));
-app.use('/api/v1/queue', require('./routes/queue'));
-app.use('/api/v1/printing', require('./routes/printing'));
-app.use('/api/v1/billing', require('./routes/billing'));
-app.use('/api/v1/revenue', require('./routes/revenue'));
+// Mount Routes with /api/v1, /api, and root fallbacks
+const authRouter = require('./routes/auth');
+const adminRouter = require('./routes/admin');
+const customersRouter = require('./routes/customers');
+const terminalsRouter = require('./routes/terminals');
+const ratesRouter = require('./routes/rates');
+const printersRouter = require('./routes/printers');
+const allocationsRouter = require('./routes/allocations');
+const sessionsRouter = require('./routes/sessions');
+const queueRouter = require('./routes/queue');
+const printingRouter = require('./routes/printing');
+const billingRouter = require('./routes/billing');
+const revenueRouter = require('./routes/revenue');
+
+// Canonical /api/v1 routes
+app.use('/api/v1/auth', authRouter);
+app.use('/api/v1/admin', adminRouter);
+app.use('/api/v1/customers', customersRouter);
+app.use('/api/v1/terminals', terminalsRouter);
+app.use('/api/v1/rates', ratesRouter);
+app.use('/api/v1/printers', printersRouter);
+app.use('/api/v1/allocations', allocationsRouter);
+app.use('/api/v1/sessions', sessionsRouter);
+app.use('/api/v1/queue', queueRouter);
+app.use('/api/v1/printing', printingRouter);
+app.use('/api/v1/billing', billingRouter);
+app.use('/api/v1/revenue', revenueRouter);
+
+// Fallback /api routes
+app.use('/api/auth', authRouter);
+app.use('/api/admin', adminRouter);
+app.use('/api/customers', customersRouter);
+app.use('/api/terminals', terminalsRouter);
+app.use('/api/rates', ratesRouter);
+app.use('/api/printers', printersRouter);
+app.use('/api/allocations', allocationsRouter);
+app.use('/api/sessions', sessionsRouter);
+app.use('/api/queue', queueRouter);
+app.use('/api/printing', printingRouter);
+app.use('/api/billing', billingRouter);
+app.use('/api/revenue', revenueRouter);
+
+// Fallback direct root routes (e.g. /auth/login)
+app.use('/auth', authRouter);
+app.use('/admin', adminRouter);
+app.use('/customers', customersRouter);
+app.use('/terminals', terminalsRouter);
+app.use('/rates', ratesRouter);
+app.use('/printers', printersRouter);
+app.use('/allocations', allocationsRouter);
+app.use('/sessions', sessionsRouter);
+app.use('/printing', printingRouter);
+app.use('/billing', billingRouter);
+app.use('/revenue', revenueRouter);
 
 const path = require('path');
 const fs = require('fs');
