@@ -27,8 +27,11 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      const isLoginRoute = error.config?.url?.includes('/auth/login');
-      if (!isLoginRoute && window.location.pathname !== '/login') {
+      const url = error.config?.url || '';
+      const isAuthRoute = url.includes('/auth/login') || url.includes('/auth/me');
+      const onLoginPage = window.location.pathname === '/login';
+      // Only force-logout on 401 from real data endpoints, not auth-check routes
+      if (!isAuthRoute && !onLoginPage) {
         localStorage.removeItem('cyber_cafe_token');
         window.location.href = '/login';
       }
