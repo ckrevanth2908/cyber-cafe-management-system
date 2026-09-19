@@ -1,24 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { Search, Monitor, CheckCircle, AlertCircle, UserPlus, Play } from 'lucide-react';
 import { customersApi, terminalsApi, allocationsApi, ratesApi } from '../api';
 import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 
-const allocationSchema = z.object({
-  customerId: z.string().min(1, 'Please select a customer'),
-  systemType: z.enum(['browsing', 'gaming', 'academic'], { errorMap: () => ({ message: "Please select a system type" }) }),
-  duration: z.number({ coerce: true }).min(15, 'Minimum duration is 15 minutes').max(720, 'Maximum duration is 12 hours'),
-  terminalId: z.string().optional()
-});
-
 const Allocate = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [selectedType, setSelectedType] = useState('browsing');
+  const [duration, setDuration] = useState(60);
+  const [selectedTerminalId, setSelectedTerminalId] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -41,27 +36,12 @@ const Allocate = () => {
     queryFn: ratesApi.list
   });
 
-  const { register, handleSubmit, watch, setValue, formState: { errors, isSubmitting } } = useForm({
-    resolver: zodResolver(allocationSchema),
-    defaultValues: { 
-      systemType: 'browsing',
-      duration: 60,
-      customerId: '',
-      terminalId: ''
-    }
-  });
-
-  const selectedCustomerId = watch('customerId');
-  const selectedType = watch('systemType');
-  const duration = watch('duration') || 60;
-  const selectedTerminalId = watch('terminalId');
-
-  // Auto-select first customer if available and none selected
+  // Auto-select first customer if available
   useEffect(() => {
     if (allCustomers && allCustomers.length > 0 && !selectedCustomerId) {
-      setValue('customerId', allCustomers[0].id.toString());
+      setSelectedCustomerId(allCustomers[0].id.toString());
     }
-  }, [allCustomers, selectedCustomerId, setValue]);
+  }, [allCustomers, selectedCustomerId]);
 
   const allocateMutation = useMutation({
     mutationFn: allocationsApi.allocate,
@@ -70,10 +50,10 @@ const Allocate = () => {
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
       queryClient.invalidateQueries({ queryKey: ['activeSessions'] });
       queryClient.invalidateQueries({ queryKey: ['adminStats'] });
-      setSuccessMessage(`Allocated ${data.terminal_number || 'PC'} successfully! Redirecting...`);
+      setSuccessMessage(`Allocated ${data.terminal_number || 'PC'} successfully! Redirecting to active sessions...`);
       setTimeout(() => {
         navigate('/sessions');
-      }, 800);
+      }, 700);
     },
     onError: (error) => {
       const msg = error.response?.data?.detail || error.response?.data?.message || 'Failed to allocate terminal';
@@ -102,18 +82,24 @@ const Allocate = () => {
   const availableMatchingTerminals = matchingTerminals.filter(t => t.status === 'available');
 
   const currentRateObj = (rates || []).find(r => (r.service_type || r.serviceType || '').toLowerCase() === selectedType.toLowerCase());
-  const hourlyRate = currentRateObj ? (currentRateObj.rate_per_unit || currentRateObj.ratePerHour || 20) : 20;
+  const hourlyRate = currentRateObj ? (currentRateObj.rate_per_unit || currentRateObj.ratePerHour || 20) : (selectedType === 'gaming' ? 50 : selectedType === 'academic' ? 15 : 20);
   const estimatedCost = (duration / 60) * hourlyRate;
 
-  const onSubmit = (data) => {
+  const handleStartSession = (e) => {
+    e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
 
+    if (!selectedCustomerId) {
+      setErrorMessage('Please select a customer first.');
+      return;
+    }
+
     allocateMutation.mutate({
-      customer_id: parseInt(data.customerId, 10),
-      terminal_id: data.terminalId ? parseInt(data.terminalId, 10) : undefined,
-      system_type: data.systemType,
-      duration_minutes: parseInt(data.duration, 10)
+      customer_id: parseInt(selectedCustomerId, 10),
+      terminal_id: selectedTerminalId ? parseInt(selectedTerminalId, 10) : undefined,
+      system_type: selectedType,
+      duration_minutes: parseInt(duration, 10)
     });
   };
 
@@ -139,7 +125,7 @@ const Allocate = () => {
       )}
 
       <div className="bg-white shadow-sm rounded-xl border border-gray-200 p-6">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+        <form onSubmit={handleStartSession} className="space-y-8">
           
           {/* Step 1: Customer Selection */}
           <section>
@@ -155,7 +141,6 @@ const Allocate = () => {
               </button>
             </div>
             
-            {/* Quick Customer Picker Dropdown or Search */}
             <div className="space-y-3">
               <div className="flex flex-col sm:flex-row gap-3">
                 <div className="flex-1 relative">
@@ -174,12 +159,12 @@ const Allocate = () => {
                 <div className="flex-1">
                   <select
                     value={selectedCustomerId}
-                    onChange={(e) => setValue('customerId', e.target.value, { shouldValidate: true })}
+                    onChange={(e) => setSelectedCustomerId(e.target.value)}
                     className="block w-full py-2 px-3 border border-gray-300 rounded-lg text-sm bg-white font-medium focus:outline-none focus:ring-primary focus:border-primary"
                   >
-                    <option value="">-- Choose from Customer List --</option>
+                    <option value="">-- Choose Customer --</option>
                     {filteredCustomers.map(c => (
-                      <option key={c.id} value={c.id}>
+                      <option key={c.id} value={c.id.toString()}>
                         {c.name} (Age: {c.age}, {c.phone || 'No phone'})
                       </option>
                     ))}
@@ -202,9 +187,6 @@ const Allocate = () => {
                 </div>
               )}
             </div>
-            
-            <input type="hidden" {...register('customerId')} />
-            {errors.customerId && <p className="text-xs text-red-600 mt-1 font-semibold">{errors.customerId.message}</p>}
           </section>
 
           {/* Step 2: System Type */}
@@ -221,26 +203,21 @@ const Allocate = () => {
               ].map((item) => {
                 const isSelected = selectedType === item.id;
                 const r = (rates || []).find(rate => (rate.service_type || rate.serviceType || '').toLowerCase() === item.id);
-                const price = r ? (r.rate_per_unit || r.ratePerHour || 0) : 20;
+                const price = r ? (r.rate_per_unit || r.ratePerHour || 0) : (item.id === 'gaming' ? 50 : item.id === 'academic' ? 15 : 20);
                 
                 const typeTerms = (terminals || []).filter(t => (t.type_name || t.type || '').toLowerCase() === item.id);
                 const countAvail = typeTerms.filter(t => t.status === 'available').length;
 
                 return (
-                  <label 
+                  <div 
                     key={item.id}
+                    onClick={() => setSelectedType(item.id)}
                     className={`border rounded-xl p-4 cursor-pointer transition-all flex flex-col justify-between ${
                       isSelected 
                         ? 'border-primary ring-2 ring-primary/30 bg-blue-50/70 shadow-sm' 
                         : 'border-gray-200 hover:border-gray-300 bg-white'
                     }`}
                   >
-                    <input
-                      type="radio"
-                      value={item.id}
-                      {...register('systemType')}
-                      className="sr-only"
-                    />
                     <div>
                       <div className="flex justify-between items-start">
                         <p className="font-bold text-gray-900 text-sm">{item.title}</p>
@@ -255,11 +232,10 @@ const Allocate = () => {
                         {countAvail > 0 ? `${countAvail} Available` : 'Auto-Allocate'}
                       </span>
                     </div>
-                  </label>
+                  </div>
                 );
               })}
             </div>
-            {errors.systemType && <p className="mt-2 text-xs text-red-600 font-semibold">{errors.systemType.message}</p>}
           </section>
 
           {/* Optional: Specific PC selection */}
@@ -269,12 +245,13 @@ const Allocate = () => {
                 Specific Terminal (Optional - Leave blank for Auto-Assign)
               </label>
               <select
-                {...register('terminalId')}
+                value={selectedTerminalId}
+                onChange={(e) => setSelectedTerminalId(e.target.value)}
                 className="w-full sm:w-80 py-2 px-3 border border-gray-300 rounded-lg text-sm bg-white font-medium"
               >
                 <option value="">⚡ Automatic Best Available Terminal</option>
                 {matchingTerminals.map(t => (
-                  <option key={t.id} value={t.id} disabled={t.status === 'occupied'}>
+                  <option key={t.id} value={t.id.toString()} disabled={t.status === 'occupied'}>
                     Terminal {t.terminal_number} ({t.status.toUpperCase()}) {t.specifications ? `- ${t.specifications}` : ''}
                   </option>
                 ))}
@@ -295,7 +272,8 @@ const Allocate = () => {
                   step="15"
                   min="15"
                   max="720"
-                  {...register('duration')}
+                  value={duration}
+                  onChange={(e) => setDuration(parseInt(e.target.value, 10) || 15)}
                   className="flex-1 block w-full border-gray-300 rounded-none rounded-l-lg text-sm border py-2 px-3 font-semibold text-gray-900"
                 />
                 <span className="inline-flex items-center px-3.5 rounded-r-lg border border-l-0 border-gray-300 bg-gray-50 text-gray-600 text-xs font-bold">
@@ -307,14 +285,13 @@ const Allocate = () => {
                   <button
                     key={mins}
                     type="button"
-                    onClick={() => setValue('duration', mins)}
+                    onClick={() => setDuration(mins)}
                     className={`text-xs px-3 py-1 rounded-md border font-semibold ${duration === mins ? 'bg-primary text-white border-primary shadow-sm' : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'}`}
                   >
                     {mins >= 60 ? `${mins / 60} hr` : `${mins}m`}
                   </button>
                 ))}
               </div>
-              {errors.duration && <p className="mt-1 text-xs text-red-600 font-semibold">{errors.duration.message}</p>}
             </div>
           </section>
 
@@ -347,11 +324,11 @@ const Allocate = () => {
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || !selectedCustomerId}
+              disabled={allocateMutation.isPending || !selectedCustomerId}
               className="inline-flex items-center justify-center py-2.5 px-6 rounded-lg text-sm font-bold text-white bg-primary hover:bg-primary-dark shadow-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
               <Play className="w-4 h-4 mr-1.5 fill-current" />
-              <span>{isSubmitting ? 'Allocating System...' : 'Start Session & Allocate PC'}</span>
+              <span>{allocateMutation.isPending ? 'Allocating System...' : 'Start Session & Allocate PC'}</span>
             </button>
           </div>
         </form>
