@@ -9,7 +9,11 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
-      retry: 1,
+      retry: false,          // don't retry failed requests — avoids reload loops
+      staleTime: 10000,      // treat data as fresh for 10s — avoids hammering the API
+    },
+    mutations: {
+      retry: false,
     },
   },
 });

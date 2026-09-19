@@ -17,25 +17,29 @@ const Dashboard = () => {
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['adminStats'],
     queryFn: adminApi.getStats,
-    refetchInterval: 3000
+    refetchInterval: 30000,
+    placeholderData: (prev) => prev,
   });
 
   const { data: terminals, isLoading: terminalsLoading } = useQuery({
     queryKey: ['terminals'],
     queryFn: terminalsApi.list,
-    refetchInterval: 3000
+    refetchInterval: 30000,
+    placeholderData: (prev) => prev,
   });
 
   const { data: activeSessions, isLoading: sessionsLoading } = useQuery({
     queryKey: ['activeSessions'],
     queryFn: () => sessionsApi.list({ status: 'active' }),
-    refetchInterval: 3000
+    refetchInterval: 30000,
+    placeholderData: (prev) => prev,
   });
 
   const { data: dailyRevenue, isLoading: revenueLoading } = useQuery({
     queryKey: ['dailyRevenue'],
     queryFn: () => revenueApi.daily(),
-    refetchInterval: 10000
+    refetchInterval: 60000,
+    placeholderData: (prev) => prev,
   });
 
   const endSessionMutation = useMutation({
@@ -68,11 +72,13 @@ const Dashboard = () => {
     }
   });
 
-  const isLoading = statsLoading || terminalsLoading || sessionsLoading;
+  // Only block on first load — placeholderData keeps old data during refetch so no flash
+  const isLoading = (statsLoading && !stats) || (terminalsLoading && !terminals) || (sessionsLoading && !activeSessions);
 
   if (isLoading) {
     return <div className="flex h-64 items-center justify-center"><LoadingSpinner size="lg" /></div>;
   }
+
 
   // Construct chart breakdown from dailyRevenue
   const chartData = [

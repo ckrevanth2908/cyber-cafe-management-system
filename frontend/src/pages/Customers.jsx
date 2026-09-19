@@ -25,13 +25,15 @@ const Customers = () => {
   const { data: customers, isLoading } = useQuery({
     queryKey: ['customers', searchTerm],
     queryFn: () => customersApi.list(searchTerm),
-    refetchInterval: 5000
+    refetchInterval: 30000,
+    placeholderData: (prev) => prev,
   });
 
   const { data: activeSessions } = useQuery({
     queryKey: ['activeSessions'],
     queryFn: () => sessionsApi.list({ status: 'active' }),
-    refetchInterval: 5000
+    refetchInterval: 30000,
+    placeholderData: (prev) => prev,
   });
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm({

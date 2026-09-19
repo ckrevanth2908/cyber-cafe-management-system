@@ -36,13 +36,15 @@ const Sessions = () => {
       status: tab === 'history' || tab === 'all' ? undefined : tab,
       search: searchTerm || undefined 
     }),
-    refetchInterval: tab === 'active' ? 5000 : 15000
+    refetchInterval: 30000,
+    placeholderData: (prev) => prev,
   });
 
   const { data: summaryStats } = useQuery({
     queryKey: ['sessionHistorySummary'],
     queryFn: sessionsApi.historySummary,
-    refetchInterval: 15000
+    refetchInterval: 60000,
+    placeholderData: (prev) => prev,
   });
 
   const endSessionMutation = useMutation({
