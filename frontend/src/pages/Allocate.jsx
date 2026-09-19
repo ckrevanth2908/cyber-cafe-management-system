@@ -50,10 +50,10 @@ const Allocate = () => {
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
       queryClient.invalidateQueries({ queryKey: ['activeSessions'] });
       queryClient.invalidateQueries({ queryKey: ['adminStats'] });
-      setSuccessMessage(`Allocated ${data.terminal_number || 'PC'} successfully! Redirecting to active sessions...`);
+      setSuccessMessage(`Allocated ${data.terminal_number || 'PC'} successfully! Redirecting to live active sessions...`);
       setTimeout(() => {
         navigate('/sessions');
-      }, 700);
+      }, 600);
     },
     onError: (error) => {
       const msg = error.response?.data?.detail || error.response?.data?.message || 'Failed to allocate terminal';
@@ -79,8 +79,6 @@ const Allocate = () => {
     return tTypeName === selectedType.toLowerCase();
   });
 
-  const availableMatchingTerminals = matchingTerminals.filter(t => t.status === 'available');
-
   const currentRateObj = (rates || []).find(r => (r.service_type || r.serviceType || '').toLowerCase() === selectedType.toLowerCase());
   const hourlyRate = currentRateObj ? (currentRateObj.rate_per_unit || currentRateObj.ratePerHour || 20) : (selectedType === 'gaming' ? 50 : selectedType === 'academic' ? 15 : 20);
   const estimatedCost = (duration / 60) * hourlyRate;
@@ -95,11 +93,26 @@ const Allocate = () => {
       return;
     }
 
+    const typeIdMap = {
+      browsing: 1,
+      gaming: 2,
+      academic: 3
+    };
+    const finalTypeId = typeIdMap[selectedType] || 1;
+
     allocateMutation.mutate({
       customer_id: parseInt(selectedCustomerId, 10),
+      customerId: parseInt(selectedCustomerId, 10),
+      terminal_type_id: finalTypeId,
+      terminalTypeId: finalTypeId,
       terminal_id: selectedTerminalId ? parseInt(selectedTerminalId, 10) : undefined,
+      terminalId: selectedTerminalId ? parseInt(selectedTerminalId, 10) : undefined,
       system_type: selectedType,
-      duration_minutes: parseInt(duration, 10)
+      systemType: selectedType,
+      duration_minutes: parseInt(duration, 10),
+      durationMinutes: parseInt(duration, 10),
+      expectedDurationMinutes: parseInt(duration, 10),
+      duration: parseInt(duration, 10)
     });
   };
 
@@ -228,8 +241,8 @@ const Allocate = () => {
                     
                     <div className="mt-4 pt-3 border-t border-gray-100 flex justify-between items-center text-xs">
                       <span className="font-black text-gray-900 text-sm">₹{price} / hr</span>
-                      <span className={`px-2 py-0.5 rounded font-bold ${countAvail > 0 ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                        {countAvail > 0 ? `${countAvail} Available` : 'Auto-Allocate'}
+                      <span className={`px-2 py-0.5 rounded font-bold ${countAvail > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {countAvail > 0 ? `${countAvail} Available` : 'All Occupied (Auto-Free)'}
                       </span>
                     </div>
                   </div>
@@ -250,11 +263,14 @@ const Allocate = () => {
                 className="w-full sm:w-80 py-2 px-3 border border-gray-300 rounded-lg text-sm bg-white font-medium"
               >
                 <option value="">⚡ Automatic Best Available Terminal</option>
-                {matchingTerminals.map(t => (
-                  <option key={t.id} value={t.id.toString()} disabled={t.status === 'occupied'}>
-                    Terminal {t.terminal_number} ({t.status.toUpperCase()}) {t.specifications ? `- ${t.specifications}` : ''}
-                  </option>
-                ))}
+                {matchingTerminals.map(t => {
+                  const isOcc = t.status === 'occupied';
+                  return (
+                    <option key={t.id} value={t.id.toString()} className={isOcc ? 'text-red-600 font-bold bg-red-50' : ''}>
+                      Terminal {t.terminal_number} - {isOcc ? '🔴 OCCUPIED' : '🟢 AVAILABLE'} {t.specifications ? `(${t.specifications})` : ''}
+                    </option>
+                  );
+                })}
               </select>
             </section>
           )}

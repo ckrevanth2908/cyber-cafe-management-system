@@ -20,7 +20,7 @@ function saveDbToDisk() {
   }
 }
 
-// Wrapper to mimic synchronous prepare().all(), prepare().get(), prepare().run()
+// Wrapper to provide standard prepare().all(), prepare().get(), prepare().run()
 const db = {
   exec(sql) {
     if (!rawDb) throw new Error('Database not initialized');
@@ -54,8 +54,15 @@ const db = {
       run(...params) {
         if (!rawDb) throw new Error('Database not initialized');
         rawDb.run(sql, params);
-        const lastIdRes = rawDb.exec('SELECT last_insert_rowid() as id');
-        const lastInsertRowid = lastIdRes.length && lastIdRes[0].values.length ? lastIdRes[0].values[0][0] : null;
+        let lastInsertRowid = null;
+        try {
+          const lastIdRes = rawDb.exec('SELECT last_insert_rowid() as id');
+          if (lastIdRes.length && lastIdRes[0].values.length) {
+            lastInsertRowid = lastIdRes[0].values[0][0];
+          }
+        } catch (e) {
+          // ignore
+        }
         saveDbToDisk();
         return { lastInsertRowid };
       }
@@ -64,16 +71,9 @@ const db = {
   transaction(fn) {
     return (...args) => {
       if (!rawDb) throw new Error('Database not initialized');
-      rawDb.exec('BEGIN TRANSACTION;');
-      try {
-        const result = fn(...args);
-        rawDb.exec('COMMIT;');
-        saveDbToDisk();
-        return result;
-      } catch (err) {
-        rawDb.exec('ROLLBACK;');
-        throw err;
-      }
+      const result = fn(...args);
+      saveDbToDisk();
+      return result;
     };
   }
 };

@@ -3,8 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Plus, Search, X } from 'lucide-react';
-import { customersApi } from '../api';
+import { Plus, Search, X, Monitor, CheckCircle, UserCheck } from 'lucide-react';
+import { customersApi, sessionsApi } from '../api';
 import PageHeader from '../components/PageHeader';
 import DataTable from '../components/DataTable';
 
@@ -25,6 +25,12 @@ const Customers = () => {
   const { data: customers, isLoading } = useQuery({
     queryKey: ['customers', searchTerm],
     queryFn: () => customersApi.list(searchTerm),
+  });
+
+  const { data: activeSessions } = useQuery({
+    queryKey: ['activeSessions'],
+    queryFn: () => sessionsApi.list({ status: 'active' }),
+    refetchInterval: 15000
   });
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm({
@@ -72,76 +78,126 @@ const Customers = () => {
   };
 
   const columns = [
-    { header: 'Name', accessorKey: 'name' },
-    { header: 'Phone', accessorKey: 'phone' },
-    { header: 'Email', accessorKey: 'email' },
-    { header: 'Age', accessorKey: 'age' },
+    { 
+      header: 'Name', 
+      accessorKey: 'name',
+      cell: (row) => {
+        const activeSess = activeSessions?.find(s => s.customer_id === row.id || s.customerId === row.id);
+        return (
+          <div className="flex items-center space-x-2">
+            <span className={`font-bold ${activeSess ? 'text-red-600' : 'text-gray-900'}`}>
+              {row.name}
+            </span>
+            {activeSess && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-200">
+                🔴 On PC {activeSess.terminal_number || activeSess.terminalNumber}
+              </span>
+            )}
+          </div>
+        );
+      }
+    },
+    { 
+      header: 'Phone', 
+      accessorKey: 'phone',
+      cell: (row) => row.phone || 'N/A'
+    },
+    { 
+      header: 'Email', 
+      accessorKey: 'email',
+      cell: (row) => row.email || 'N/A'
+    },
+    { 
+      header: 'Age', 
+      accessorKey: 'age',
+      cell: (row) => <span className="font-semibold text-gray-700">{row.age} yrs</span>
+    },
+    { 
+      header: 'Current Status',
+      accessorKey: 'status',
+      cell: (row) => {
+        const activeSess = activeSessions?.find(s => s.customer_id === row.id || s.customerId === row.id);
+        if (activeSess) {
+          return (
+            <span className="px-2.5 py-1 rounded-full text-xs font-black bg-red-600 text-white shadow-sm">
+              OCCUPIED
+            </span>
+          );
+        }
+        return (
+          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">
+            Idle
+          </span>
+        );
+      }
+    },
     { 
       header: 'Actions',
       cell: (row) => (
         <button
           onClick={(e) => { e.stopPropagation(); openForm(row); }}
-          className="text-primary hover:text-primary-dark font-medium"
+          className="text-primary hover:text-primary-dark font-bold text-xs"
         >
-          Edit
+          Edit Profile
         </button>
       )
     }
   ];
 
   return (
-    <div className="relative">
+    <div className="relative space-y-6 max-w-7xl mx-auto">
       <PageHeader 
-        title="Customers" 
+        title="Registered Customer Profiles" 
+        subtitle="Manage customer records, view real-time occupied statuses (highlighted in RED), and edit contact details"
         action={
           <button 
             onClick={() => openForm()}
-            className="flex items-center px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-dark"
+            className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark text-xs font-bold shadow-sm"
           >
-            <Plus className="w-5 h-5 mr-2" />
+            <Plus className="w-4 h-4 mr-1.5" />
             Add Customer
           </button>
         }
       />
 
-      <div className="mb-6">
-        <div className="relative max-w-md">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search className="h-5 w-5 text-gray-400" />
-          </div>
-          <input
-            type="text"
-            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm"
-            placeholder="Search by name, phone, or email..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+      <div className="relative max-w-md">
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <Search className="h-4 w-4 text-gray-400" />
         </div>
+        <input
+          type="text"
+          className="block w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm bg-white placeholder-gray-400 focus:outline-none focus:ring-primary focus:border-primary shadow-sm"
+          placeholder="Search by customer name, phone, or email..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
       </div>
 
-      <DataTable 
-        columns={columns} 
-        data={customers || []} 
-        loading={isLoading} 
-      />
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+        <DataTable 
+          columns={columns} 
+          data={customers || []} 
+          loading={isLoading} 
+        />
+      </div>
 
       {/* Slide-in Form Panel */}
       {isFormOpen && (
         <div className="fixed inset-0 overflow-hidden z-50">
-          <div className="absolute inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={closeForm} />
+          <div className="absolute inset-0 bg-black bg-opacity-50 transition-opacity" onClick={closeForm} />
           <section className="absolute inset-y-0 right-0 pl-10 max-w-full flex">
             <div className="w-screen max-w-md">
               <div className="h-full divide-y divide-gray-200 flex flex-col bg-white shadow-xl">
                 <div className="flex-1 h-0 overflow-y-auto">
                   <div className="py-6 px-4 bg-primary sm:px-6">
                     <div className="flex items-center justify-between">
-                      <h2 className="text-lg font-medium text-white">
-                        {editingCustomer ? 'Edit Customer' : 'New Customer'}
+                      <h2 className="text-lg font-bold text-white">
+                        {editingCustomer ? 'Edit Customer Profile' : 'Register New Customer'}
                       </h2>
                       <div className="ml-3 h-7 flex items-center">
                         <button
                           onClick={closeForm}
-                          className="bg-primary rounded-md text-primary-light hover:text-white focus:outline-none"
+                          className="bg-primary rounded-md text-blue-200 hover:text-white focus:outline-none"
                         >
                           <X className="h-6 w-6" />
                         </button>
@@ -151,46 +207,50 @@ const Customers = () => {
                   <div className="flex-1 flex flex-col justify-between">
                     <div className="px-4 divide-y divide-gray-200 sm:px-6">
                       <div className="space-y-6 pt-6 pb-5">
-                        <form id="customer-form" onSubmit={handleSubmit(onSubmit)}>
+                        <form id="customer-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                           
-                          <div className="mb-4">
-                            <label className="block text-sm font-medium text-gray-900">Name</label>
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Full Name</label>
                             <input
                               type="text"
                               {...register('name')}
-                              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                              className="w-full border border-gray-300 rounded-lg shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary text-sm"
+                              placeholder="e.g. Ramesh Kumar"
                             />
-                            {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>}
+                            {errors.name && <p className="mt-1 text-xs text-red-600 font-semibold">{errors.name.message}</p>}
                           </div>
 
-                          <div className="mb-4">
-                            <label className="block text-sm font-medium text-gray-900">Phone Number</label>
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Phone Number</label>
                             <input
                               type="text"
                               {...register('phone')}
-                              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                              className="w-full border border-gray-300 rounded-lg shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary text-sm"
+                              placeholder="e.g. +91 9876543210"
                             />
-                            {errors.phone && <p className="mt-1 text-sm text-red-600">{errors.phone.message}</p>}
+                            {errors.phone && <p className="mt-1 text-xs text-red-600 font-semibold">{errors.phone.message}</p>}
                           </div>
 
-                          <div className="mb-4">
-                            <label className="block text-sm font-medium text-gray-900">Email <span className="text-gray-500 font-normal">(Optional)</span></label>
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Email (Optional)</label>
                             <input
                               type="email"
                               {...register('email')}
-                              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                              className="w-full border border-gray-300 rounded-lg shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary text-sm"
+                              placeholder="e.g. user@example.com"
                             />
-                            {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>}
+                            {errors.email && <p className="mt-1 text-xs text-red-600 font-semibold">{errors.email.message}</p>}
                           </div>
 
-                          <div className="mb-4">
-                            <label className="block text-sm font-medium text-gray-900">Age</label>
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Age</label>
                             <input
                               type="number"
                               {...register('age')}
-                              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                              className="w-full border border-gray-300 rounded-lg shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary text-sm"
+                              placeholder="e.g. 21"
                             />
-                            {errors.age && <p className="mt-1 text-sm text-red-600">{errors.age.message}</p>}
+                            {errors.age && <p className="mt-1 text-xs text-red-600 font-semibold">{errors.age.message}</p>}
                           </div>
 
                         </form>
@@ -202,16 +262,16 @@ const Customers = () => {
                   <button
                     type="button"
                     onClick={closeForm}
-                    className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                    className="bg-white py-2 px-4 border border-gray-300 rounded-lg shadow-sm text-xs font-semibold text-gray-700 hover:bg-gray-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     form="customer-form"
-                    className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                    className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-xs font-bold rounded-lg text-white bg-primary hover:bg-primary-dark"
                   >
-                    Save
+                    Save Customer
                   </button>
                 </div>
               </div>

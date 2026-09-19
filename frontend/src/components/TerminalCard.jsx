@@ -4,41 +4,52 @@ import StatusBadge from './StatusBadge';
 import SessionTimer from './SessionTimer';
 
 const TerminalCard = ({ terminal, session, onClick }) => {
-  const isOccupied = terminal.status.toLowerCase() === 'occupied';
+  const statusStr = (terminal.status || 'available').toLowerCase();
+  const isOccupied = statusStr === 'occupied';
+  const isMaintenance = statusStr === 'maintenance';
+
+  const terminalNumber = terminal.terminal_number || terminal.number || 'PC';
+  const terminalType = terminal.type_name || terminal.type || 'Standard';
+  const customerName = session?.customer_name || session?.customerName || terminal.current_session?.customer_name || 'Occupied';
+  const endTime = session?.expected_end_time || session?.expectedEnd || terminal.current_session?.expected_end_time;
 
   return (
     <div 
       onClick={onClick}
-      className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all duration-200 ${
+      className={`relative p-4 rounded-xl border-2 transition-all duration-200 cursor-pointer ${
         isOccupied 
-          ? 'border-red-200 bg-red-50 hover:border-red-300' 
-          : terminal.status.toLowerCase() === 'maintenance'
-            ? 'border-yellow-200 bg-yellow-50 hover:border-yellow-300'
-            : 'border-green-200 bg-white hover:border-green-300 hover:shadow-md'
+          ? 'border-red-500 bg-red-50/90 shadow-md ring-2 ring-red-400/30' 
+          : isMaintenance
+            ? 'border-amber-300 bg-amber-50 hover:border-amber-400'
+            : 'border-green-300 bg-white hover:border-green-500 hover:shadow-md'
       }`}
     >
-      <div className="flex justify-between items-start mb-4">
+      <div className="flex justify-between items-start mb-2">
         <div className="flex items-center space-x-2">
-          <Monitor className={`w-5 h-5 ${isOccupied ? 'text-red-500' : 'text-green-500'}`} />
-          <h3 className="font-bold text-lg text-gray-800">{terminal.number}</h3>
+          <Monitor className={`w-5 h-5 ${isOccupied ? 'text-red-600' : isMaintenance ? 'text-amber-600' : 'text-green-600'}`} />
+          <h3 className={`font-black text-lg ${isOccupied ? 'text-red-900' : 'text-gray-800'}`}>
+            {terminalNumber}
+          </h3>
         </div>
         <StatusBadge status={terminal.status} />
       </div>
 
-      <div className="text-sm text-gray-600 mb-4">
-        <p className="capitalize">Type: <span className="font-medium text-gray-900">{terminal.type}</span></p>
+      <div className="text-xs text-gray-600 mb-2">
+        <p className="capitalize">Type: <span className="font-bold text-gray-800">{terminalType}</span></p>
       </div>
 
-      {isOccupied && session && (
-        <div className="mt-4 pt-4 border-t border-red-100 space-y-2">
-          <div className="flex items-center text-sm text-gray-700">
-            <User className="w-4 h-4 mr-2 text-gray-500" />
-            <span className="truncate">{session.customerName}</span>
+      {isOccupied && (
+        <div className="mt-3 pt-3 border-t border-red-200 bg-red-100/60 -mx-4 -mb-4 p-3 rounded-b-lg space-y-1.5">
+          <div className="flex items-center text-xs font-bold text-red-900 truncate">
+            <User className="w-3.5 h-3.5 mr-1.5 text-red-600 flex-shrink-0" />
+            <span className="truncate">{customerName}</span>
           </div>
-          <div className="flex items-center text-sm text-gray-700">
-            <Clock className="w-4 h-4 mr-2 text-gray-500" />
-            <SessionTimer endTime={session.expectedEnd} />
-          </div>
+          {endTime && (
+            <div className="flex items-center text-xs text-red-800 font-semibold">
+              <Clock className="w-3.5 h-3.5 mr-1.5 text-red-600 flex-shrink-0" />
+              <SessionTimer endTime={endTime} />
+            </div>
+          )}
         </div>
       )}
     </div>
