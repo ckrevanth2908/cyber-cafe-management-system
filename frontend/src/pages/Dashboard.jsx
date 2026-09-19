@@ -21,13 +21,13 @@ const Dashboard = () => {
   const { data: terminals, isLoading: terminalsLoading } = useQuery({
     queryKey: ['terminals'],
     queryFn: terminalsApi.list,
-    refetchInterval: 15000
+    refetchInterval: 5000
   });
 
   const { data: activeSessions, isLoading: sessionsLoading } = useQuery({
     queryKey: ['activeSessions'],
     queryFn: () => sessionsApi.list({ status: 'active' }),
-    refetchInterval: 15000
+    refetchInterval: 5000
   });
 
   const { data: dailyRevenue, isLoading: revenueLoading } = useQuery({

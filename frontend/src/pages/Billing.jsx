@@ -46,8 +46,11 @@ const Billing = () => {
       setSelectedSessionId('');
       setErrorMsg('');
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['activeSessions'] });
       queryClient.invalidateQueries({ queryKey: ['terminals'] });
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
       queryClient.invalidateQueries({ queryKey: ['revenue'] });
+      queryClient.invalidateQueries({ queryKey: ['dailyRevenue'] });
       queryClient.invalidateQueries({ queryKey: ['adminStats'] });
     },
     onError: (err) => {

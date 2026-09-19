@@ -27,8 +27,11 @@ const Sessions = () => {
     mutationFn: sessionsApi.endSession,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['activeSessions'] });
       queryClient.invalidateQueries({ queryKey: ['terminals'] });
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
       queryClient.invalidateQueries({ queryKey: ['adminStats'] });
+      queryClient.invalidateQueries({ queryKey: ['dailyRevenue'] });
       setSessionToCancel(null);
     }
   });
