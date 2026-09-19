@@ -26,7 +26,7 @@ router.get('/', authMiddleware, (req, res) => {
   query += ' ORDER BY t.terminal_number ASC';
   const terminals = db.prepare(query).all(...params);
 
-  // Attach active session if occupied
+  // Attach active session if occupied, and auto-heal orphaned occupied terminals
   const result = terminals.map(term => {
     if (term.status === 'occupied') {
       const activeSession = db.prepare(`
@@ -36,7 +36,13 @@ router.get('/', authMiddleware, (req, res) => {
         WHERE s.terminal_id = ? AND s.status = 'active'
         LIMIT 1
       `).get(term.id);
-      return { ...term, current_session: activeSession || null };
+
+      if (!activeSession) {
+        // Self-heal: No active session exists, mark available in DB!
+        db.prepare("UPDATE terminals SET status = 'available' WHERE id = ?").run(term.id);
+        return { ...term, status: 'available', current_session: null };
+      }
+      return { ...term, current_session: activeSession };
     }
     return { ...term, current_session: null };
   });
@@ -139,6 +145,11 @@ function updateTerminalStatus(req, res) {
   if (existing.status === 'occupied' && status === 'maintenance') {
     return res.status(400).json({ detail: 'Cannot put occupied terminal into maintenance' });
   }
+
+  db.prepare('UPDATE terminals SET status = ? WHERE id = ?').run(status, req.params.id);
+  const updated = db.prepare('SELECT * FROM terminals WHERE id = ?').get(req.params.id);
+  return res.json(updated);
+}
 
 // POST /api/v1/terminals/:id/free
 // POST /api/v1/terminals/:id/release

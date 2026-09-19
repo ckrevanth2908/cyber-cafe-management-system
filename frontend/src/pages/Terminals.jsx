@@ -71,7 +71,14 @@ const Terminals = () => {
 
   const freeTerminalMutation = useMutation({
     mutationFn: terminalsApi.freeTerminal,
-    onSuccess: () => {
+    onMutate: async (terminalId) => {
+      await queryClient.cancelQueries({ queryKey: ['terminals'] });
+      queryClient.setQueryData(['terminals'], (old) => {
+        if (!old) return old;
+        return old.map(t => t.id === terminalId ? { ...t, status: 'available', current_session: null } : t);
+      });
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['terminals'] });
       queryClient.invalidateQueries({ queryKey: ['activeSessions'] });
       queryClient.invalidateQueries({ queryKey: ['sessions'] });

@@ -47,7 +47,16 @@ const Sessions = () => {
 
   const endSessionMutation = useMutation({
     mutationFn: sessionsApi.endSession,
-    onSuccess: () => {
+    onMutate: async (sessionId) => {
+      await queryClient.cancelQueries({ queryKey: ['sessions'] });
+      await queryClient.cancelQueries({ queryKey: ['terminals'] });
+      // Optimistically update sessions list
+      queryClient.setQueryData(['sessions', tab, searchTerm], (old) => {
+        if (!old) return old;
+        return old.map(s => s.id === sessionId ? { ...s, status: 'completed' } : s);
+      });
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
       queryClient.invalidateQueries({ queryKey: ['activeSessions'] });
       queryClient.invalidateQueries({ queryKey: ['terminals'] });

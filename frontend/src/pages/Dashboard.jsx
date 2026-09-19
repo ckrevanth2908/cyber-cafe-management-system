@@ -17,30 +17,47 @@ const Dashboard = () => {
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['adminStats'],
     queryFn: adminApi.getStats,
-    refetchInterval: 10000
+    refetchInterval: 3000
   });
 
   const { data: terminals, isLoading: terminalsLoading } = useQuery({
     queryKey: ['terminals'],
     queryFn: terminalsApi.list,
-    refetchInterval: 5000
+    refetchInterval: 3000
   });
 
   const { data: activeSessions, isLoading: sessionsLoading } = useQuery({
     queryKey: ['activeSessions'],
     queryFn: () => sessionsApi.list({ status: 'active' }),
-    refetchInterval: 5000
+    refetchInterval: 3000
   });
 
   const { data: dailyRevenue, isLoading: revenueLoading } = useQuery({
     queryKey: ['dailyRevenue'],
     queryFn: () => revenueApi.daily(),
-    refetchInterval: 20000
+    refetchInterval: 10000
   });
 
   const endSessionMutation = useMutation({
     mutationFn: sessionsApi.endSession,
-    onSuccess: () => {
+    onMutate: async (sessionId) => {
+      await queryClient.cancelQueries({ queryKey: ['terminals'] });
+      await queryClient.cancelQueries({ queryKey: ['activeSessions'] });
+
+      // Find terminal id for session
+      const targetSession = activeSessions?.find(s => s.id === sessionId);
+      if (targetSession) {
+        queryClient.setQueryData(['terminals'], (old) => {
+          if (!old) return old;
+          return old.map(t => t.id === targetSession.terminal_id ? { ...t, status: 'available', current_session: null } : t);
+        });
+        queryClient.setQueryData(['activeSessions'], (old) => {
+          if (!old) return old;
+          return old.filter(s => s.id !== sessionId);
+        });
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['adminStats'] });
       queryClient.invalidateQueries({ queryKey: ['terminals'] });
       queryClient.invalidateQueries({ queryKey: ['activeSessions'] });

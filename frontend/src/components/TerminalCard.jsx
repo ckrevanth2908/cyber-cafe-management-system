@@ -18,7 +18,16 @@ const TerminalCard = ({ terminal, session, onClick, onFree }) => {
 
   const freeSeatMutation = useMutation({
     mutationFn: () => terminalsApi.freeTerminal(terminal.id),
-    onSuccess: () => {
+    onMutate: async () => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['terminals'] });
+      // Optimistically update terminals cache to immediately turn green
+      queryClient.setQueryData(['terminals'], (old) => {
+        if (!old) return old;
+        return old.map(t => t.id === terminal.id ? { ...t, status: 'available', current_session: null } : t);
+      });
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['terminals'] });
       queryClient.invalidateQueries({ queryKey: ['activeSessions'] });
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
@@ -32,9 +41,7 @@ const TerminalCard = ({ terminal, session, onClick, onFree }) => {
 
   const handleFreeSeat = (e) => {
     e.stopPropagation();
-    if (window.confirm(`Release ${terminalNumber} and revoke occupied status for ${customerName}?`)) {
-      freeSeatMutation.mutate();
-    }
+    freeSeatMutation.mutate();
   };
 
   return (
