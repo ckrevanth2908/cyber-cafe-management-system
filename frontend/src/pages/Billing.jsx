@@ -16,15 +16,17 @@ const Billing = () => {
   const [errorMsg, setErrorMsg] = useState('');
 
   // Get active sessions
-  const { data: activeSessions, isLoading: activeLoading } = useQuery({
+  const { data: activeSessions = [], isLoading: activeLoading } = useQuery({
     queryKey: ['sessions', 'active'],
-    queryFn: () => sessionsApi.list({ status: 'active' })
+    queryFn: () => sessionsApi.list({ status: 'active' }),
+    placeholderData: (prev) => prev,
   });
 
   // Get completed unbilled/all sessions
-  const { data: completedSessions, isLoading: completedLoading } = useQuery({
+  const { data: completedSessions = [], isLoading: completedLoading } = useQuery({
     queryKey: ['sessions', 'completed'],
-    queryFn: () => sessionsApi.list({ status: 'completed' })
+    queryFn: () => sessionsApi.list({ status: 'completed' }),
+    placeholderData: (prev) => prev,
   });
 
   const allSessions = [
@@ -155,7 +157,7 @@ const Billing = () => {
           <DataTable 
             columns={columns} 
             data={allSessions} 
-            loading={activeLoading || completedLoading} 
+            loading={(activeLoading || completedLoading) && allSessions.length === 0} 
             onRowClick={(row) => setSelectedSessionId(row.id)}
           />
         </div>

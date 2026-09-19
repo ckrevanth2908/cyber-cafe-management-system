@@ -11,14 +11,16 @@ const Admin = () => {
   const [editingRateId, setEditingRateId] = useState(null);
   const [newRateValue, setNewRateValue] = useState('');
 
-  const { data: config, isLoading: configLoading } = useQuery({
+  const { data: config = {}, isLoading: configLoading } = useQuery({
     queryKey: ['config'],
-    queryFn: adminApi.getConfig
+    queryFn: adminApi.getConfig,
+    placeholderData: (prev) => prev,
   });
 
-  const { data: rates, isLoading: ratesLoading } = useQuery({
+  const { data: rates = [], isLoading: ratesLoading } = useQuery({
     queryKey: ['rates'],
-    queryFn: ratesApi.list
+    queryFn: ratesApi.list,
+    placeholderData: (prev) => prev,
   });
 
   const updateRateMutation = useMutation({

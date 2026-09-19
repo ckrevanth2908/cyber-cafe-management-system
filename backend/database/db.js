@@ -71,9 +71,16 @@ const db = {
   transaction(fn) {
     return (...args) => {
       if (!rawDb) throw new Error('Database not initialized');
-      const result = fn(...args);
-      saveDbToDisk();
-      return result;
+      rawDb.run('BEGIN TRANSACTION');
+      try {
+        const result = fn(...args);
+        rawDb.run('COMMIT');
+        saveDbToDisk();
+        return result;
+      } catch (err) {
+        try { rawDb.run('ROLLBACK'); } catch (e) { /* ignore rollback error */ }
+        throw err;
+      }
     };
   }
 };

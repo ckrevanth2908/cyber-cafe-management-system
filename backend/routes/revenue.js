@@ -70,7 +70,7 @@ router.get('/sessions-today', (req, res) => {
     JOIN customers c ON s.customer_id = c.id
     JOIN terminals t ON s.terminal_id = t.id
     JOIN terminal_types tt ON t.type_id = tt.id
-    WHERE date(s.created_at) = ? AND s.status = 'completed'
+    WHERE DATE(s.start_time) = ? AND s.status = 'completed'
     ORDER BY s.id DESC
   `).all(today);
   return res.json(sessions);

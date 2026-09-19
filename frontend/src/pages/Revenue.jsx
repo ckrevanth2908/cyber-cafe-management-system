@@ -15,12 +15,13 @@ const Revenue = () => {
     to: format(new Date(), 'yyyy-MM-dd')
   });
 
-  const { data: summary, isLoading } = useQuery({
+  const { data: summary = {}, isLoading, isError, refetch } = useQuery({
     queryKey: ['revenueSummary', dateRange],
-    queryFn: () => revenueApi.summary(dateRange.from, dateRange.to)
+    queryFn: () => revenueApi.summary(dateRange.from, dateRange.to),
+    placeholderData: (prev) => prev,
   });
 
-  if (isLoading) {
+  if (isLoading && !summary?.totals) {
     return <div className="flex h-64 items-center justify-center"><LoadingSpinner size="lg" /></div>;
   }
 
@@ -92,6 +93,13 @@ const Revenue = () => {
           </div>
         }
       />
+
+      {isError && (
+        <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 text-sm text-red-700">
+          <span>Failed to load financial reports. Server might be waking up.</span>
+          <button onClick={() => refetch()} className="text-xs font-bold underline">Retry</button>
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">

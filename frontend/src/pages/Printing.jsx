@@ -22,24 +22,28 @@ const Printing = () => {
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  const { data: printJobs, isLoading } = useQuery({
+  const { data: printJobs = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ['printing'],
-    queryFn: () => printingApi.list()
+    queryFn: () => printingApi.list(),
+    placeholderData: (prev) => prev,
   });
 
-  const { data: printers } = useQuery({
+  const { data: printers = [] } = useQuery({
     queryKey: ['printers'],
-    queryFn: printersApi.list
+    queryFn: printersApi.list,
+    placeholderData: (prev) => prev,
   });
 
-  const { data: rates } = useQuery({
+  const { data: rates = [] } = useQuery({
     queryKey: ['rates'],
-    queryFn: ratesApi.list
+    queryFn: ratesApi.list,
+    placeholderData: (prev) => prev,
   });
 
-  const { data: allCustomers } = useQuery({
+  const { data: allCustomers = [] } = useQuery({
     queryKey: ['customers'],
     queryFn: () => customersApi.list(),
+    placeholderData: (prev) => prev,
   });
 
   const { register, handleSubmit, watch, setValue, reset, formState: { errors, isSubmitting } } = useForm({
@@ -271,8 +275,8 @@ const Printing = () => {
         <h3 className="text-lg font-bold text-gray-900">Recent Printing & Xerox Operations</h3>
         <DataTable 
           columns={columns} 
-          data={printJobs || []} 
-          loading={isLoading} 
+          data={printJobs} 
+          loading={isLoading && printJobs.length === 0} 
         />
       </div>
 

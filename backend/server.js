@@ -89,6 +89,12 @@ if (fs.existsSync(frontendDistPath)) {
   });
 }
 
+// Global error handler — catches any unhandled errors in routes
+app.use((err, req, res, next) => {
+  console.error('[Server Error]', err.message || err);
+  res.status(500).json({ detail: err.message || 'Internal server error' });
+});
+
 async function startServer() {
   await initDB();
 

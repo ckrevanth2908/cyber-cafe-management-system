@@ -18,14 +18,17 @@ const Terminals = () => {
   
   const queryClient = useQueryClient();
 
-  const { data: terminals, isLoading } = useQuery({
+  const { data: terminals = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ['terminals'],
-    queryFn: terminalsApi.list
+    queryFn: terminalsApi.list,
+    refetchInterval: 30000,
+    placeholderData: (prev) => prev,
   });
 
   const { data: terminalTypes } = useQuery({
     queryKey: ['terminalTypes'],
-    queryFn: terminalsApi.types
+    queryFn: terminalsApi.types,
+    placeholderData: (prev) => prev,
   });
 
   const toggleMaintenance = useMutation({
@@ -201,24 +204,37 @@ const Terminals = () => {
         ))}
       </div>
 
-      {viewMode === 'grid' ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {filteredTerminals.map(terminal => (
-            <TerminalCard 
-              key={terminal.id} 
-              terminal={terminal} 
-              session={terminal.current_session}
-              onClick={() => {
-                if (terminal.status !== 'occupied') {
-                  toggleMaintenance.mutate({ 
-                    id: terminal.id, 
-                    status: terminal.status === 'maintenance' ? 'available' : 'maintenance' 
-                  });
-                }
-              }}
-            />
-          ))}
+      {isError && (
+        <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 text-sm text-red-700">
+          <span>Could not load terminals. Server may be warming up.</span>
+          <button onClick={() => refetch()} className="text-xs font-bold underline">Retry</button>
         </div>
+      )}
+
+      {viewMode === 'grid' ? (
+        filteredTerminals.length === 0 ? (
+          <div className="bg-white p-8 rounded-xl text-center text-gray-500 border border-gray-200">
+            {isLoading ? 'Loading computer terminals...' : 'No terminals found matching this filter.'}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {filteredTerminals.map(terminal => (
+              <TerminalCard 
+                key={terminal.id} 
+                terminal={terminal} 
+                session={terminal.current_session}
+                onClick={() => {
+                  if (terminal.status !== 'occupied') {
+                    toggleMaintenance.mutate({ 
+                      id: terminal.id, 
+                      status: terminal.status === 'maintenance' ? 'available' : 'maintenance' 
+                    });
+                  }
+                }}
+              />
+            ))}
+          </div>
+        )
       ) : (
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <DataTable 

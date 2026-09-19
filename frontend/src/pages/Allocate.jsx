@@ -19,21 +19,24 @@ const Allocate = () => {
   const [successMessage, setSuccessMessage] = useState('');
   
   // Fetch all customers
-  const { data: allCustomers, isLoading: customersLoading } = useQuery({
+  const { data: allCustomers = [], isLoading: customersLoading } = useQuery({
     queryKey: ['customers'],
     queryFn: () => customersApi.list(),
+    placeholderData: (prev) => prev,
   });
 
   // Fetch all terminals
-  const { data: terminals, isLoading: terminalsLoading } = useQuery({
+  const { data: terminals = [], isLoading: terminalsLoading } = useQuery({
     queryKey: ['terminals'],
-    queryFn: terminalsApi.list
+    queryFn: terminalsApi.list,
+    placeholderData: (prev) => prev,
   });
 
   // Fetch pricing rates
-  const { data: rates } = useQuery({
+  const { data: rates = [] } = useQuery({
     queryKey: ['rates'],
-    queryFn: ratesApi.list
+    queryFn: ratesApi.list,
+    placeholderData: (prev) => prev,
   });
 
   // Auto-select first customer if available

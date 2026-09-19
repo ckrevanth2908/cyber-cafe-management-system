@@ -4,56 +4,76 @@ const { db } = require('../database/db');
 
 // GET /api/v1/printers
 router.get('/', (req, res) => {
-  const printers = db.prepare('SELECT * FROM printers ORDER BY id ASC').all();
-  return res.json(printers);
+  try {
+    const printers = db.prepare('SELECT * FROM printers ORDER BY id ASC').all();
+    return res.json(printers);
+  } catch (err) {
+    console.error('[printers GET]', err.message);
+    return res.status(500).json({ detail: err.message });
+  }
 });
 
 // POST /api/v1/printers
 router.post('/', (req, res) => {
-  const { name, printer_type, specifications, is_active } = req.body;
-  if (!name || !printer_type) {
-    return res.status(400).json({ detail: 'Printer name and type are required' });
+  try {
+    const { name, printer_type, specifications, is_active } = req.body;
+    if (!name || !printer_type) {
+      return res.status(400).json({ detail: 'Printer name and type are required' });
+    }
+
+    const result = db.prepare(`
+      INSERT INTO printers (name, printer_type, specifications, is_active)
+      VALUES (?, ?, ?, ?)
+    `).run(name, printer_type, specifications || '', is_active !== undefined ? (is_active ? 1 : 0) : 1);
+
+    const printer = db.prepare('SELECT * FROM printers WHERE id = ?').get(result.lastInsertRowid);
+    return res.status(201).json(printer);
+  } catch (err) {
+    console.error('[printers POST]', err.message);
+    return res.status(500).json({ detail: err.message });
   }
-
-  const result = db.prepare(`
-    INSERT INTO printers (name, printer_type, specifications, is_active)
-    VALUES (?, ?, ?, ?)
-  `).run(name, printer_type, specifications || '', is_active !== undefined ? (is_active ? 1 : 0) : 1);
-
-  const printer = db.prepare('SELECT * FROM printers WHERE id = ?').get(result.lastInsertRowid);
-  return res.status(201).json(printer);
 });
 
 // PUT /api/v1/printers/:id
 router.put('/:id', (req, res) => {
-  const { name, printer_type, specifications, is_active } = req.body;
-  const existing = db.prepare('SELECT id FROM printers WHERE id = ?').get(req.params.id);
-  if (!existing) {
-    return res.status(404).json({ detail: 'Printer not found' });
+  try {
+    const { name, printer_type, specifications, is_active } = req.body;
+    const existing = db.prepare('SELECT id FROM printers WHERE id = ?').get(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ detail: 'Printer not found' });
+    }
+
+    db.prepare(`
+      UPDATE printers
+      SET name = COALESCE(?, name),
+          printer_type = COALESCE(?, printer_type),
+          specifications = COALESCE(?, specifications),
+          is_active = COALESCE(?, is_active)
+      WHERE id = ?
+    `).run(name, printer_type, specifications, is_active !== undefined ? (is_active ? 1 : 0) : null, req.params.id);
+
+    const updated = db.prepare('SELECT * FROM printers WHERE id = ?').get(req.params.id);
+    return res.json(updated);
+  } catch (err) {
+    console.error('[printers/:id PUT]', err.message);
+    return res.status(500).json({ detail: err.message });
   }
-
-  db.prepare(`
-    UPDATE printers
-    SET name = COALESCE(?, name),
-        printer_type = COALESCE(?, printer_type),
-        specifications = COALESCE(?, specifications),
-        is_active = COALESCE(?, is_active)
-    WHERE id = ?
-  `).run(name, printer_type, specifications, is_active !== undefined ? (is_active ? 1 : 0) : null, req.params.id);
-
-  const updated = db.prepare('SELECT * FROM printers WHERE id = ?').get(req.params.id);
-  return res.json(updated);
 });
 
 // DELETE /api/v1/printers/:id
 router.delete('/:id', (req, res) => {
-  const existing = db.prepare('SELECT id FROM printers WHERE id = ?').get(req.params.id);
-  if (!existing) {
-    return res.status(404).json({ detail: 'Printer not found' });
-  }
+  try {
+    const existing = db.prepare('SELECT id FROM printers WHERE id = ?').get(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ detail: 'Printer not found' });
+    }
 
-  db.prepare('DELETE FROM printers WHERE id = ?').run(req.params.id);
-  return res.json({ detail: 'Printer deleted successfully' });
+    db.prepare('DELETE FROM printers WHERE id = ?').run(req.params.id);
+    return res.json({ detail: 'Printer deleted successfully' });
+  } catch (err) {
+    console.error('[printers/:id DELETE]', err.message);
+    return res.status(500).json({ detail: err.message });
+  }
 });
 
 module.exports = router;

@@ -7,6 +7,8 @@ import SessionTimer from './SessionTimer';
 
 const TerminalCard = ({ terminal, session, onClick, onFree }) => {
   const queryClient = useQueryClient();
+  if (!terminal) return null;
+
   const statusStr = (terminal.status || 'available').toLowerCase();
   const isOccupied = statusStr === 'occupied';
   const isMaintenance = statusStr === 'maintenance';
@@ -39,9 +41,14 @@ const TerminalCard = ({ terminal, session, onClick, onFree }) => {
     }
   });
 
+  const handleFreeSeat = (e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    freeSeatMutation.mutate();
+  };
+
   const handleCardClick = (e) => {
     if (isOccupied) {
-      freeSeatMutation.mutate();
+      handleFreeSeat(e);
     } else if (onClick) {
       onClick(e);
     }

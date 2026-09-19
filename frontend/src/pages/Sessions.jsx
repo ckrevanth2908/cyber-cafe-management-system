@@ -30,7 +30,7 @@ const Sessions = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const { data: sessions, isLoading } = useQuery({
+  const { data: sessions = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ['sessions', tab, searchTerm],
     queryFn: () => sessionsApi.list({ 
       status: tab === 'history' || tab === 'all' ? undefined : tab,
@@ -40,7 +40,7 @@ const Sessions = () => {
     placeholderData: (prev) => prev,
   });
 
-  const { data: summaryStats } = useQuery({
+  const { data: summaryStats = {} } = useQuery({
     queryKey: ['sessionHistorySummary'],
     queryFn: sessionsApi.historySummary,
     refetchInterval: 60000,
@@ -368,8 +368,8 @@ const Sessions = () => {
         {/* Sessions Table */}
         <DataTable 
           columns={columns} 
-          data={sessions || []} 
-          loading={isLoading} 
+          data={sessions} 
+          loading={isLoading && sessions.length === 0} 
         />
       </div>
 

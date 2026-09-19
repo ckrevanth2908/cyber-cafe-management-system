@@ -9,6 +9,10 @@ const SessionTimer = ({ endTime }) => {
     if (!endTime) return;
 
     const end = new Date(endTime);
+    if (isNaN(end.getTime())) {
+      setTimeLeft('--:--');
+      return;
+    }
 
     const updateTimer = () => {
       const now = new Date();
