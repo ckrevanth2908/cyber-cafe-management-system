@@ -1,13 +1,10 @@
 import React, { useState } from 'react';
-import { useForm } from 'react-form'; // Actually we need react-hook-form
+import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Monitor } from 'lucide-react';
-
-// Using correct imports for react-hook-form below
-import { useForm as useRHForm } from 'react-hook-form';
 
 const loginSchema = z.object({
   username: z.string().min(1, 'Username is required'),
@@ -19,7 +16,7 @@ const Login = () => {
   const navigate = useNavigate();
   const [error, setError] = useState('');
 
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useRHForm({
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
     resolver: zodResolver(loginSchema)
   });
 
