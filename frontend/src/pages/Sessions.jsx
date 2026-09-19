@@ -162,10 +162,11 @@ const Sessions = () => {
           {row.status === 'active' ? (
             <button
               onClick={() => setSessionToCancel(row)}
-              className="text-red-700 hover:text-red-900 font-bold text-xs flex items-center bg-red-100/70 hover:bg-red-200 px-2.5 py-1 rounded-md border border-red-300 transition-colors shadow-sm"
+              className="text-white bg-red-600 hover:bg-red-700 font-bold text-xs flex items-center px-3 py-1.5 rounded-lg shadow-sm transition-all active:scale-95"
+              title="Click when customer leaves to free this seat"
             >
               <StopCircle className="w-3.5 h-3.5 mr-1" />
-              End Session
+              Customer Left (Free Seat)
             </button>
           ) : (
             <button
@@ -181,11 +182,14 @@ const Sessions = () => {
     }
   ];
 
+  // Filter occupied sessions for live monitor
+  const activeOccupiedSessions = (sessions || []).filter(s => s.status === 'active');
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       <PageHeader 
         title="Session Tracking & History Logs" 
-        subtitle="Live tracking of running computer sessions and comprehensive historical session logs with financial charges in ₹"
+        subtitle="Live tracking of running computer sessions, currently occupied seats, and comprehensive historical logs in ₹"
         action={
           <div className="flex items-center space-x-2">
             <button
@@ -219,11 +223,11 @@ const Sessions = () => {
 
         <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
           <div className="flex items-center space-x-2 text-gray-500 text-xs font-bold uppercase">
-            <PlayCircle className="w-4 h-4 text-green-600" />
-            <span>Active Running</span>
+            <PlayCircle className="w-4 h-4 text-red-600" />
+            <span>Currently Occupied</span>
           </div>
-          <p className="text-2xl font-black text-green-700 mt-2">{summaryStats?.active_sessions || 0}</p>
-          <span className="text-xs text-green-600 font-medium">Currently occupied PCs</span>
+          <p className="text-2xl font-black text-red-700 mt-2">{summaryStats?.active_sessions ?? activeOccupiedSessions.length}</p>
+          <span className="text-xs text-red-600 font-semibold">Live in-use terminals</span>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
@@ -249,12 +253,75 @@ const Sessions = () => {
         </div>
       </div>
 
+      {/* Currently Occupied Seats Live Grid */}
+      {activeOccupiedSessions.length > 0 && (
+        <div className="bg-gradient-to-r from-red-50 via-white to-red-50 p-5 rounded-xl border-2 border-red-300 shadow-sm space-y-4">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center space-x-2">
+              <span className="w-3 h-3 rounded-full bg-red-600 animate-ping" />
+              <h3 className="font-black text-red-900 text-base uppercase tracking-wide">
+                Live Occupied Seats ({activeOccupiedSessions.length})
+              </h3>
+            </div>
+            <span className="text-xs font-bold text-red-700 bg-red-100 px-3 py-1 rounded-full border border-red-200">
+              Click "Customer Left" when session finishes to free seat
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {activeOccupiedSessions.map(sess => (
+              <div 
+                key={sess.id}
+                className="bg-white p-4 rounded-xl border-2 border-red-400 shadow-md space-y-3 relative overflow-hidden"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className="px-2.5 py-0.5 rounded-md text-xs font-black bg-red-600 text-white shadow-sm">
+                        {sess.terminal_number || sess.terminalNumber || 'PC'}
+                      </span>
+                      <span className="text-xs font-bold uppercase text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
+                        {sess.terminal_type_name || sess.type || 'Standard'}
+                      </span>
+                    </div>
+                    <h4 className="font-black text-gray-900 text-sm mt-1.5">
+                      {sess.customer_name || sess.customerName || 'Customer'}
+                    </h4>
+                    <p className="text-xs text-gray-500">{sess.customer_phone || sess.phone || 'No phone recorded'}</p>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-xs font-semibold text-gray-500 block">Remaining</span>
+                    <SessionTimer endTime={sess.expected_end_time || sess.expectedEnd} />
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-gray-100 flex justify-between items-center text-xs text-gray-600">
+                  <span>Started: <strong>{sess.start_time ? format(new Date(sess.start_time), 'hh:mm a') : 'Now'}</strong></span>
+                  <span>Duration: <strong>{sess.expected_duration_minutes || 60}m</strong></span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSessionToCancel(sess)}
+                  disabled={endSessionMutation.isPending}
+                  className="w-full py-2 px-3 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-black shadow transition-all active:scale-95 flex items-center justify-center space-x-1.5"
+                >
+                  <StopCircle className="w-4 h-4" />
+                  <span>Customer Left (Free Seat)</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Tabs & Search Bar */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 space-y-4">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div className="flex flex-wrap gap-1 bg-gray-100 p-1 rounded-lg border border-gray-200 text-xs font-bold">
             {[
-              { id: 'active', label: '⚡ Active Live Sessions' },
+              { id: 'active', label: `⚡ Active Live (${activeOccupiedSessions.length})` },
               { id: 'history', label: '📜 Session History & Logs' },
               { id: 'completed', label: '✅ Completed Sessions' },
               { id: 'all', label: '🌐 All Records' }

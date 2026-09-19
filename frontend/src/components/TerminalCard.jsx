@@ -40,18 +40,18 @@ const TerminalCard = ({ terminal, session, onClick, onFree }) => {
   return (
     <div 
       onClick={onClick}
-      className={`relative p-4 rounded-xl border-2 transition-all duration-200 cursor-pointer ${
+      className={`relative p-4 rounded-xl border-2 transition-all duration-300 cursor-pointer ${
         isOccupied 
-          ? 'border-red-500 bg-red-50/90 shadow-md ring-2 ring-red-400/30' 
+          ? 'border-red-500 bg-red-50/90 shadow-md ring-2 ring-red-400/40' 
           : isMaintenance
             ? 'border-amber-300 bg-amber-50 hover:border-amber-400'
-            : 'border-green-300 bg-white hover:border-green-500 hover:shadow-md'
+            : 'border-green-400 bg-green-50/60 hover:border-green-600 hover:bg-green-100/60 hover:shadow-md'
       }`}
     >
       <div className="flex justify-between items-start mb-2">
         <div className="flex items-center space-x-2">
           <Monitor className={`w-5 h-5 ${isOccupied ? 'text-red-600' : isMaintenance ? 'text-amber-600' : 'text-green-600'}`} />
-          <h3 className={`font-black text-lg ${isOccupied ? 'text-red-900' : 'text-gray-800'}`}>
+          <h3 className={`font-black text-lg ${isOccupied ? 'text-red-900' : isMaintenance ? 'text-amber-900' : 'text-green-900'}`}>
             {terminalNumber}
           </h3>
         </div>
