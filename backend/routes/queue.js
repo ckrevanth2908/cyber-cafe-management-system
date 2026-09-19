@@ -1,10 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../database/db');
-const { authMiddleware } = require('../middleware/auth');
 
 // GET /api/v1/queue
-router.get('/', authMiddleware, (req, res) => {
+router.get('/', (req, res) => {
   const queue = db.prepare(`
     SELECT q.*, c.name as customer_name, c.phone as customer_phone,
            tt.name as terminal_type_name
@@ -43,7 +42,7 @@ router.get('/', authMiddleware, (req, res) => {
 });
 
 // POST /api/v1/queue
-router.post('/', authMiddleware, (req, res) => {
+router.post('/', (req, res) => {
   const { customer_id, terminal_type_id, expected_duration_minutes, priority } = req.body;
   if (!customer_id || !terminal_type_id || !expected_duration_minutes) {
     return res.status(400).json({ detail: 'Customer, system type, and duration are required' });
@@ -72,8 +71,8 @@ router.post('/', authMiddleware, (req, res) => {
 });
 
 // DELETE /api/v1/queue/:id & POST /api/v1/queue/:id/cancel
-router.delete('/:id', authMiddleware, handleCancelQueue);
-router.post('/:id/cancel', authMiddleware, handleCancelQueue);
+router.delete('/:id', handleCancelQueue);
+router.post('/:id/cancel', handleCancelQueue);
 
 function handleCancelQueue(req, res) {
   const existing = db.prepare('SELECT id FROM waiting_queue WHERE id = ?').get(req.params.id);

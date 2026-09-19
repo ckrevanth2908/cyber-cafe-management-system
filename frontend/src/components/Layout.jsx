@@ -1,19 +1,16 @@
 import React from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Users, 
   Monitor, 
   Clock, 
   PlayCircle, 
-  ListOrdered, 
   Printer, 
   Receipt, 
   LineChart, 
-  Settings,
-  LogOut
+  Settings
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
 
 const NAV_ITEMS = [
   { name: 'Dashboard', path: '/', icon: LayoutDashboard },
@@ -28,14 +25,6 @@ const NAV_ITEMS = [
 ];
 
 const Layout = () => {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
@@ -51,6 +40,7 @@ const Layout = () => {
               <li key={item.name}>
                 <NavLink
                   to={item.path}
+                  end={item.path === '/'}
                   className={({ isActive }) =>
                     `flex items-center px-4 py-3 rounded-md transition-colors ${
                       isActive
@@ -76,18 +66,6 @@ const Layout = () => {
             <h2 className="text-xl font-semibold text-gray-800">
               Cyber Café Management System
             </h2>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">
-                Logged in as <strong className="text-gray-900">{user?.username || 'Admin'}</strong>
-              </span>
-              <button
-                onClick={handleLogout}
-                className="flex items-center text-red-600 hover:text-red-800 text-sm font-medium"
-              >
-                <LogOut className="w-4 h-4 mr-1" />
-                Logout
-              </button>
-            </div>
           </div>
         </header>
 

@@ -1,10 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../database/db');
-const { authMiddleware } = require('../middleware/auth');
 
 // GET /api/v1/revenue/daily
-router.get('/daily', authMiddleware, (req, res) => {
+router.get('/daily', (req, res) => {
   const date = req.query.date || new Date().toISOString().slice(0, 10);
   let record = db.prepare('SELECT * FROM daily_revenue WHERE date = ?').get(date);
 
@@ -28,7 +27,7 @@ router.get('/daily', authMiddleware, (req, res) => {
 });
 
 // GET /api/v1/revenue/summary
-router.get('/summary', authMiddleware, (req, res) => {
+router.get('/summary', (req, res) => {
   const { from_date, to_date } = req.query;
   const from = from_date || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const to = to_date || new Date().toISOString().slice(0, 10);
@@ -63,7 +62,7 @@ router.get('/summary', authMiddleware, (req, res) => {
 });
 
 // GET /api/v1/revenue/sessions-today
-router.get('/sessions-today', authMiddleware, (req, res) => {
+router.get('/sessions-today', (req, res) => {
   const today = new Date().toISOString().slice(0, 10);
   const sessions = db.prepare(`
     SELECT s.*, c.name as customer_name, t.terminal_number, tt.name as terminal_type_name

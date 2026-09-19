@@ -3,7 +3,6 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { db } = require('../database/db');
-const { authMiddleware } = require('../middleware/auth');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'cybercafe_super_secret_key_2024';
 
@@ -39,7 +38,7 @@ router.post('/login', (req, res) => {
 });
 
 // GET /api/v1/auth/me
-router.get('/me', authMiddleware, (req, res) => {
+router.get('/me', (req, res) => {
   const user = db.prepare('SELECT id, username, full_name, role, created_at FROM users WHERE id = ?').get(req.user.id);
   if (!user) {
     return res.status(404).json({ detail: 'User not found' });

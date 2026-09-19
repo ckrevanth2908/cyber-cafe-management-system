@@ -1,16 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../database/db');
-const { authMiddleware, adminOnly } = require('../middleware/auth');
 
 // GET /api/v1/printers
-router.get('/', authMiddleware, (req, res) => {
+router.get('/', (req, res) => {
   const printers = db.prepare('SELECT * FROM printers ORDER BY id ASC').all();
   return res.json(printers);
 });
 
 // POST /api/v1/printers
-router.post('/', authMiddleware, adminOnly, (req, res) => {
+router.post('/', (req, res) => {
   const { name, printer_type, specifications, is_active } = req.body;
   if (!name || !printer_type) {
     return res.status(400).json({ detail: 'Printer name and type are required' });
@@ -26,7 +25,7 @@ router.post('/', authMiddleware, adminOnly, (req, res) => {
 });
 
 // PUT /api/v1/printers/:id
-router.put('/:id', authMiddleware, adminOnly, (req, res) => {
+router.put('/:id', (req, res) => {
   const { name, printer_type, specifications, is_active } = req.body;
   const existing = db.prepare('SELECT id FROM printers WHERE id = ?').get(req.params.id);
   if (!existing) {
@@ -47,7 +46,7 @@ router.put('/:id', authMiddleware, adminOnly, (req, res) => {
 });
 
 // DELETE /api/v1/printers/:id
-router.delete('/:id', authMiddleware, adminOnly, (req, res) => {
+router.delete('/:id', (req, res) => {
   const existing = db.prepare('SELECT id FROM printers WHERE id = ?').get(req.params.id);
   if (!existing) {
     return res.status(404).json({ detail: 'Printer not found' });

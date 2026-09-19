@@ -1,10 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../database/db');
-const { authMiddleware } = require('../middleware/auth');
 
 // GET /api/v1/sessions
-router.get('/', authMiddleware, (req, res) => {
+router.get('/', (req, res) => {
   const { status, search, customer_id } = req.query;
   let query = `
     SELECT s.*, c.name as customer_name, c.phone as customer_phone, c.email as customer_email,
@@ -40,7 +39,7 @@ router.get('/', authMiddleware, (req, res) => {
 });
 
 // GET /api/v1/sessions/active
-router.get('/active', authMiddleware, (req, res) => {
+router.get('/active', (req, res) => {
   const active = db.prepare(`
     SELECT s.*, c.name as customer_name, c.phone as customer_phone,
            t.terminal_number, tt.name as terminal_type_name,
@@ -57,7 +56,7 @@ router.get('/active', authMiddleware, (req, res) => {
 });
 
 // GET /api/v1/sessions/history-summary
-router.get('/history-summary', authMiddleware, (req, res) => {
+router.get('/history-summary', (req, res) => {
   const stats = db.prepare(`
     SELECT 
       COUNT(*) as total_sessions,
@@ -71,7 +70,7 @@ router.get('/history-summary', authMiddleware, (req, res) => {
 });
 
 // GET /api/v1/sessions/:id
-router.get('/:id', authMiddleware, (req, res) => {
+router.get('/:id', (req, res) => {
   const session = db.prepare(`
     SELECT s.*, c.name as customer_name, c.phone as customer_phone, c.email as customer_email,
            t.terminal_number, tt.name as terminal_type_name
@@ -91,7 +90,7 @@ router.get('/:id', authMiddleware, (req, res) => {
 });
 
 // POST /api/v1/sessions/:id/end
-router.post('/:id/end', authMiddleware, (req, res) => {
+router.post('/:id/end', (req, res) => {
   const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(req.params.id);
   if (!session || session.status !== 'active') {
     return res.status(400).json({ detail: 'Active session not found' });

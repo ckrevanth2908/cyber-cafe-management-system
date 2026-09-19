@@ -1,16 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../database/db');
-const { authMiddleware, adminOnly } = require('../middleware/auth');
 
 // GET /api/v1/rates
-router.get('/', authMiddleware, (req, res) => {
+router.get('/', (req, res) => {
   const rates = db.prepare('SELECT * FROM service_rates ORDER BY id ASC').all();
   return res.json(rates);
 });
 
 // PUT /api/v1/rates/:id
-router.put('/:id', authMiddleware, adminOnly, (req, res) => {
+router.put('/:id', (req, res) => {
   const { rate_per_unit, description } = req.body;
   const existing = db.prepare('SELECT * FROM service_rates WHERE id = ?').get(req.params.id);
   if (!existing) {
@@ -30,8 +29,8 @@ router.put('/:id', authMiddleware, adminOnly, (req, res) => {
 });
 
 // PUT /api/v1/rates (Bulk Update) and /api/v1/rates/bulk
-router.put('/', authMiddleware, adminOnly, handleBulkUpdate);
-router.put('/bulk', authMiddleware, adminOnly, handleBulkUpdate);
+router.put('/', handleBulkUpdate);
+router.put('/bulk', handleBulkUpdate);
 
 function handleBulkUpdate(req, res) {
   const rates = req.body; // array of { id, rate_per_unit, description }

@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { db } = require('../database/db');
-const { authMiddleware } = require('../middleware/auth');
 
 function generateReceiptNumber() {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -11,7 +10,7 @@ function generateReceiptNumber() {
 }
 
 // GET /api/v1/billing/preview/:session_id
-router.get('/preview/:session_id', authMiddleware, (req, res) => {
+router.get('/preview/:session_id', (req, res) => {
   const session = db.prepare(`
     SELECT s.*, c.name as customer_name, c.phone as customer_phone,
            t.terminal_number, tt.name as terminal_type_name
@@ -67,7 +66,7 @@ router.get('/preview/:session_id', authMiddleware, (req, res) => {
 });
 
 // POST /api/v1/billing/finalize/:session_id
-router.post('/finalize/:session_id', authMiddleware, (req, res) => {
+router.post('/finalize/:session_id', (req, res) => {
   const { payment_method, method } = req.body;
   const selectedPaymentMethod = payment_method || method || 'cash';
   const session = db.prepare(`
@@ -168,7 +167,7 @@ router.post('/finalize/:session_id', authMiddleware, (req, res) => {
 });
 
 // GET /api/v1/billing/receipts
-router.get('/receipts', authMiddleware, (req, res) => {
+router.get('/receipts', (req, res) => {
   const receipts = db.prepare(`
     SELECT p.*, c.name as customer_name, c.phone as customer_phone
     FROM payments p

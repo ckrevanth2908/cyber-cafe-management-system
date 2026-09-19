@@ -1,10 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../database/db');
-const { authMiddleware } = require('../middleware/auth');
 
 // GET /api/v1/customers
-router.get('/', authMiddleware, (req, res) => {
+router.get('/', (req, res) => {
   const { search } = req.query;
   let customers;
   if (search) {
@@ -21,7 +20,7 @@ router.get('/', authMiddleware, (req, res) => {
 });
 
 // POST /api/v1/customers
-router.post('/', authMiddleware, (req, res) => {
+router.post('/', (req, res) => {
   const { name, age, address, phone, email } = req.body;
   if (!name || age === undefined || age === null) {
     return res.status(400).json({ detail: 'Name and age are required' });
@@ -37,7 +36,7 @@ router.post('/', authMiddleware, (req, res) => {
 });
 
 // GET /api/v1/customers/:id
-router.get('/:id', authMiddleware, (req, res) => {
+router.get('/:id', (req, res) => {
   const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id);
   if (!customer) {
     return res.status(404).json({ detail: 'Customer not found' });
@@ -68,7 +67,7 @@ router.get('/:id', authMiddleware, (req, res) => {
 });
 
 // PUT /api/v1/customers/:id
-router.put('/:id', authMiddleware, (req, res) => {
+router.put('/:id', (req, res) => {
   const { name, age, address, phone, email } = req.body;
   const existing = db.prepare('SELECT id FROM customers WHERE id = ?').get(req.params.id);
   if (!existing) {

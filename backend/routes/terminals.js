@@ -1,10 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../database/db');
-const { authMiddleware, adminOnly } = require('../middleware/auth');
 
 // GET /api/v1/terminals
-router.get('/', authMiddleware, (req, res) => {
+router.get('/', (req, res) => {
   const { type_id, status } = req.query;
   let query = `
     SELECT t.*, tt.name as type_name, tt.description as type_description
@@ -51,13 +50,13 @@ router.get('/', authMiddleware, (req, res) => {
 });
 
 // GET /api/v1/terminals/types
-router.get('/types', authMiddleware, (req, res) => {
+router.get('/types', (req, res) => {
   const types = db.prepare('SELECT * FROM terminal_types ORDER BY id ASC').all();
   return res.json(types);
 });
 
 // GET /api/v1/terminals/status-summary
-router.get('/status-summary', authMiddleware, (req, res) => {
+router.get('/status-summary', (req, res) => {
   const types = db.prepare('SELECT * FROM terminal_types').all();
   const summary = {};
 
@@ -74,7 +73,7 @@ router.get('/status-summary', authMiddleware, (req, res) => {
 });
 
 // POST /api/v1/terminals
-router.post('/', authMiddleware, adminOnly, (req, res) => {
+router.post('/', (req, res) => {
   const { terminal_number, type_id, specifications } = req.body;
   if (!terminal_number || !type_id) {
     return res.status(400).json({ detail: 'Terminal number and type are required' });
@@ -101,7 +100,7 @@ router.post('/', authMiddleware, adminOnly, (req, res) => {
 });
 
 // PUT /api/v1/terminals/:id
-router.put('/:id', authMiddleware, adminOnly, (req, res) => {
+router.put('/:id', (req, res) => {
   const { terminal_number, type_id, specifications, status } = req.body;
   const existing = db.prepare('SELECT * FROM terminals WHERE id = ?').get(req.params.id);
   if (!existing) {
@@ -128,8 +127,8 @@ router.put('/:id', authMiddleware, adminOnly, (req, res) => {
 });
 
 // PUT /api/v1/terminals/:id/status
-router.put('/:id/status', authMiddleware, updateTerminalStatus);
-router.patch('/:id/status', authMiddleware, updateTerminalStatus);
+router.put('/:id/status', updateTerminalStatus);
+router.patch('/:id/status', updateTerminalStatus);
 
 function updateTerminalStatus(req, res) {
   const { status } = req.body;
@@ -153,8 +152,8 @@ function updateTerminalStatus(req, res) {
 
 // POST /api/v1/terminals/:id/free
 // POST /api/v1/terminals/:id/release
-router.post('/:id/free', authMiddleware, freeTerminalHandler);
-router.post('/:id/release', authMiddleware, freeTerminalHandler);
+router.post('/:id/free', freeTerminalHandler);
+router.post('/:id/release', freeTerminalHandler);
 
 function freeTerminalHandler(req, res) {
   const terminalId = req.params.id;
@@ -196,7 +195,7 @@ function freeTerminalHandler(req, res) {
 }
 
 // DELETE /api/v1/terminals/:id
-router.delete('/:id', authMiddleware, adminOnly, (req, res) => {
+router.delete('/:id', (req, res) => {
   const existing = db.prepare('SELECT * FROM terminals WHERE id = ?').get(req.params.id);
   if (!existing) {
     return res.status(404).json({ detail: 'Terminal not found' });

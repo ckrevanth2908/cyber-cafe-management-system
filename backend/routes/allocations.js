@@ -1,14 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../database/db');
-const { authMiddleware } = require('../middleware/auth');
 
 function calculateSessionCharge(durationMinutes, ratePerHour) {
   return Number(((durationMinutes / 60) * ratePerHour).toFixed(2));
 }
 
 // POST /api/v1/allocations
-router.post('/', authMiddleware, (req, res) => {
+router.post('/', (req, res) => {
   const customerId = req.body.customer_id || req.body.customerId;
   let terminalTypeId = req.body.terminal_type_id || req.body.terminalTypeId;
   const durationMinutes = parseInt(req.body.duration_minutes || req.body.durationMinutes || req.body.duration || req.body.expectedDurationMinutes || 60, 10);
@@ -136,7 +135,7 @@ router.post('/', authMiddleware, (req, res) => {
 });
 
 // GET /api/v1/allocations/active
-router.get('/active', authMiddleware, (req, res) => {
+router.get('/active', (req, res) => {
   const activeAllocations = db.prepare(`
     SELECT ta.*, t.terminal_number, tt.name as terminal_type_name, c.name as customer_name,
            s.start_time, s.expected_end_time, s.expected_duration_minutes
@@ -152,7 +151,7 @@ router.get('/active', authMiddleware, (req, res) => {
 });
 
 // POST /api/v1/allocations/:id/release
-router.post('/:id/release', authMiddleware, (req, res) => {
+router.post('/:id/release', (req, res) => {
   const alloc = db.prepare('SELECT * FROM terminal_allocations WHERE id = ?').get(req.params.id);
   if (!alloc || !alloc.is_active) {
     return res.status(404).json({ detail: 'Active allocation not found' });

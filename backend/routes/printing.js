@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../database/db');
-const { authMiddleware } = require('../middleware/auth');
 
 // Helper to update daily revenue
 function recordRevenue(serviceType, amount) {
@@ -31,7 +30,7 @@ function recordRevenue(serviceType, amount) {
 }
 
 // GET /api/v1/printing
-router.get('/', authMiddleware, (req, res) => {
+router.get('/', (req, res) => {
   const { customer_id, service_type } = req.query;
   let query = `
     SELECT pt.*, c.name as customer_name, c.phone as customer_phone,
@@ -58,7 +57,7 @@ router.get('/', authMiddleware, (req, res) => {
 });
 
 // POST /api/v1/printing
-router.post('/', authMiddleware, (req, res) => {
+router.post('/', (req, res) => {
   const { customer_id, printer_id, service_type, num_pages, notes } = req.body;
   if (!customer_id || !service_type || !num_pages || num_pages <= 0) {
     return res.status(400).json({ detail: 'Customer, service type, and valid number of pages are required' });
@@ -93,7 +92,7 @@ router.post('/', authMiddleware, (req, res) => {
 });
 
 // GET /api/v1/printing/:id
-router.get('/:id', authMiddleware, (req, res) => {
+router.get('/:id', (req, res) => {
   const tx = db.prepare(`
     SELECT pt.*, c.name as customer_name, c.phone as customer_phone,
            p.name as printer_name
