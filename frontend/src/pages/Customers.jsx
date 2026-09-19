@@ -78,6 +78,18 @@ const Customers = () => {
     reset();
   };
 
+  const endSessionMutation = useMutation({
+    mutationFn: sessionsApi.endSession,
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      queryClient.invalidateQueries({ queryKey: ['activeSessions'] });
+      queryClient.invalidateQueries({ queryKey: ['terminals'] });
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['adminStats'] });
+      queryClient.invalidateQueries({ queryKey: ['dailyRevenue'] });
+    }
+  });
+
   const columns = [
     { 
       header: 'Name', 
@@ -90,9 +102,16 @@ const Customers = () => {
               {row.name}
             </span>
             {activeSess && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-200">
-                🔴 On PC {activeSess.terminal_number || activeSess.terminalNumber}
-              </span>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  endSessionMutation.mutate(activeSess.id);
+                }}
+                title="Click to release seat and set status to Available"
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-300 hover:bg-red-200 active:scale-95 transition-all"
+              >
+                🔴 On PC {activeSess.terminal_number || activeSess.terminalNumber} (Click to Free)
+              </button>
             )}
           </div>
         );
@@ -120,14 +139,21 @@ const Customers = () => {
         const activeSess = activeSessions?.find(s => s.customer_id === row.id || s.customerId === row.id);
         if (activeSess) {
           return (
-            <span className="px-2.5 py-1 rounded-full text-xs font-black bg-red-600 text-white shadow-sm">
-              OCCUPIED
-            </span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                endSessionMutation.mutate(activeSess.id);
+              }}
+              title="Click to free seat and mark customer Idle"
+              className="px-2.5 py-1 rounded-full text-xs font-black bg-red-600 hover:bg-red-700 text-white shadow-sm active:scale-95 transition-all flex items-center space-x-1"
+            >
+              <span>OCCUPIED (Free Seat)</span>
+            </button>
           );
         }
         return (
-          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">
-            Idle
+          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
+            🟢 Idle / Available
           </span>
         );
       }

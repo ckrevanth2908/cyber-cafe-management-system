@@ -1,6 +1,6 @@
 import React from 'react';
 
-const StatusBadge = ({ status }) => {
+const StatusBadge = ({ status, onClick, title }) => {
   const s = (status || 'unknown').toLowerCase();
   let colorClass = 'bg-gray-100 text-gray-800 border-gray-200';
   let dotColor = 'bg-gray-400';
@@ -23,7 +23,11 @@ const StatusBadge = ({ status }) => {
   }
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs border ${colorClass} capitalize`}>
+    <span 
+      onClick={onClick}
+      title={title}
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs border ${colorClass} capitalize ${onClick ? 'cursor-pointer hover:opacity-80 active:scale-95 transition-transform' : ''}`}
+    >
       <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${dotColor}`} />
       {status || 'Unknown'}
     </span>

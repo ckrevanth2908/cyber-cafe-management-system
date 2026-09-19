@@ -39,17 +39,21 @@ const TerminalCard = ({ terminal, session, onClick, onFree }) => {
     }
   });
 
-  const handleFreeSeat = (e) => {
-    e.stopPropagation();
-    freeSeatMutation.mutate();
+  const handleCardClick = (e) => {
+    if (isOccupied) {
+      freeSeatMutation.mutate();
+    } else if (onClick) {
+      onClick(e);
+    }
   };
 
   return (
     <div 
-      onClick={onClick}
-      className={`relative p-4 rounded-xl border-2 transition-all duration-300 cursor-pointer ${
+      onClick={handleCardClick}
+      title={isOccupied ? "Click to turn status to Available" : undefined}
+      className={`relative p-4 rounded-xl border-2 transition-all duration-300 cursor-pointer select-none active:scale-[0.99] ${
         isOccupied 
-          ? 'border-red-500 bg-red-50/90 shadow-md ring-2 ring-red-400/40' 
+          ? 'border-red-500 bg-red-50/90 shadow-md ring-2 ring-red-400/40 hover:bg-red-100/90' 
           : isMaintenance
             ? 'border-amber-300 bg-amber-50 hover:border-amber-400'
             : 'border-green-400 bg-green-50/60 hover:border-green-600 hover:bg-green-100/60 hover:shadow-md'
@@ -62,7 +66,18 @@ const TerminalCard = ({ terminal, session, onClick, onFree }) => {
             {terminalNumber}
           </h3>
         </div>
-        <StatusBadge status={terminal.status} />
+        <StatusBadge 
+          status={terminal.status} 
+          onClick={(e) => {
+            e.stopPropagation();
+            if (isOccupied) {
+              freeSeatMutation.mutate();
+            } else if (onClick) {
+              onClick(e);
+            }
+          }}
+          title={isOccupied ? "Click to turn to Available" : "Status"}
+        />
       </div>
 
       <div className="text-xs text-gray-600 mb-2">
